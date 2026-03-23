@@ -1407,25 +1407,29 @@ function App() {
     }
 
     const current = pages[currentPageIndex]?.id ?? orderedIds[0];
-    const prioritized = orderedIds
-      .map((pageId) => ({
-        pageId,
-        distance: Math.abs((pageIndexById.get(pageId) ?? 0) - currentPageIndex),
-        isCurrent: pageId === current
-      }))
-      .sort((a, b) => {
-        if (a.isCurrent) {
-          return -1;
-        }
-        if (b.isCurrent) {
-          return 1;
-        }
-        return a.distance - b.distance;
-      })
+    
+    // Calcola distanze e priorità
+    const withDistance = orderedIds.map((pageId) => {
+      const index = pageIndexById.get(pageId) ?? 0;
+      const distance = Math.abs(index - currentPageIndex);
+      const isCurrent = pageId === current;
+      return { pageId, distance, isCurrent };
+    });
+
+    // Ordina per priorità: corrente prima, poi per distanza
+    withDistance.sort((a, b) => {
+      if (a.isCurrent) {
+        return -1;
+      }
+      if (b.isCurrent) {
+        return 1;
+      }
+      return a.distance - b.distance;
+    });
+
+    return withDistance
       .slice(0, CANVAS_POOL_SIZE)
       .map((item) => item.pageId);
-
-    return orderedIds;
   }, [currentPageIndex, intersectingPageIds, pageIndexById, pages, windowPageIndexes]);
 
   const setActiveArchiveDocumentId = useCallback((archiveId: string | null) => {

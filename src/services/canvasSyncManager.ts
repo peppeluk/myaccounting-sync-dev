@@ -240,7 +240,7 @@ export class CanvasSyncManager {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === this.storageKey && e.newValue) {
         try {
-          const data = JSON.parse(e.newValue);
+          JSON.parse(e.newValue);
           this.processSyncData();
         } catch (error) {
           console.error('❌ Error parsing sync data:', error);

@@ -126,11 +126,8 @@ export function SyncRoomManager({
     if (nickname) {
       localStorage.setItem('sync-nickname', nickname);
     }
-
-    // Passa l'IP address (manuale o automatico)
-    const currentIP = useManualIP ? manualIP : ipAddress;
     
-    onJoinRoom(roomInput.trim(), nickname || undefined, currentIP || undefined);
+    onJoinRoom(roomInput.trim(), nickname || undefined);
     setIsOpen(false);
   };
 
@@ -140,10 +137,7 @@ export function SyncRoomManager({
       localStorage.setItem('sync-nickname', nickname);
     }
 
-    // Passa l'IP address (manuale o automatico)
-    const currentIP = useManualIP ? manualIP : ipAddress;
-
-    onJoinRoom(roomId, nickname || undefined, currentIP || undefined);
+    onJoinRoom(roomId, nickname || undefined);
     setIsOpen(false);
   };
 

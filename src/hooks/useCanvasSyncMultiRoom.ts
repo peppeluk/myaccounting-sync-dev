@@ -150,9 +150,7 @@ export function useCanvasSyncMultiRoom(
   );
   const currentRoomRef = useRef<string | null>(null);
   const isApplyingRemoteChangeRef = useRef(false);
-  const reconnectTimeoutRef = useRef<number | null>(null);
-  const heartbeatIntervalRef = useRef<number | null>(null);
-  const journalSyncRef = useRef<JournalSyncHandlers | null>(journalSync ?? null);
+    const journalSyncRef = useRef<JournalSyncHandlers | null>(journalSync ?? null);
   const boardSyncRef = useRef<BoardSyncHandlers | null>(boardSync ?? null);
   const handleMessageRef = useRef<((data: string) => void) | null>(null);
   const sendFullStateRef = useRef<(() => void) | null>(null);
@@ -161,10 +159,7 @@ export function useCanvasSyncMultiRoom(
   const pendingFlushTimeoutRef = useRef<number | null>(null);
   const forceSendEmptyRef = useRef(false);
 
-  // Stati MBD
-  const [mbdDocument, setMbdDocument] = useState<MBDDocument | null>(null);
-  const [isSyncingWithMBD, setIsSyncingWithMBD] = useState(false);
-
+  
   const [isConnected, setIsConnected] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<string | null>(null);
   const [latency, setLatency] = useState<number | null>(null);
@@ -215,7 +210,6 @@ export function useCanvasSyncMultiRoom(
       return;
     }
 
-    setIsSyncingWithMBD(true);
     isApplyingRemoteChangeRef.current = true;
 
     try {
@@ -223,12 +217,10 @@ export function useCanvasSyncMultiRoom(
       activeCanvas.loadFromJSON(canvasData, () => {
         activeCanvas.renderAll();
         console.log('[MBD] Document loaded from MBD:', documentId);
-        setMbdDocument(doc);
       });
     } catch (error) {
       console.error('[MBD] Error loading document:', error);
     } finally {
-      setIsSyncingWithMBD(false);
       isApplyingRemoteChangeRef.current = false;
     }
   }, [documentId]);
