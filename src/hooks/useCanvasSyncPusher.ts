@@ -320,27 +320,82 @@ export function useCanvasSyncPusher(
   }, [canvasRef]);
 
   const sendCanvasFullState = useCallback(() => {
-    const activeCanvas = canvasRef.current;
-    if (!activeCanvas || !channelRef.current) return;
+    if (!channelRef.current || !canvasRef.current) {
+      console.log('[Pusher] Cannot send canvas state - no channel or canvas');
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas.getObjects) {
+      console.log('[Pusher] Canvas not ready');
+      return;
+    }
 
     try {
-      const canvasData = activeCanvas.toJSON();
-      const backgroundMode = (window as any).appBackgroundMode;
+      // Ottieni solo gli oggetti essenziali (no background, no selection)
+      const objects = canvas.getObjects().filter((obj: any) => {
+        // Escludi oggetti temporanei o di sistema
+        return !obj.isType('selection') && !obj.isType('background');
+      });
 
-      const message = {
-        type: 'canvas-full',
-        clientId: clientIdRef.current,
-        timestamp: Date.now(),
-        canvasData: canvasData,
-        backgroundMode: backgroundMode
+      // Crea stato minimale
+      const minimalState = {
+        objects: objects.map((obj: any) => ({
+          type: obj.type,
+          left: obj.left,
+          top: obj.top,
+          width: obj.width,
+          height: obj.height,
+          fill: obj.fill,
+          stroke: obj.stroke,
+          strokeWidth: obj.strokeWidth,
+          // Aggiungi solo proprietà essenziali per ogni tipo
+          ...(obj.type === 'path' && { path: obj.path }),
+          ...(obj.type === 'rect' && { 
+            rx: obj.rx, 
+            ry: obj.ry 
+          }),
+          ...(obj.type === 'circle' && { 
+            radius: obj.radius 
+          }),
+          ...(obj.type === 'text' && { 
+            text: obj.text,
+            fontSize: obj.fontSize,
+            fontFamily: obj.fontFamily
+          })
+        })),
+        metadata: {
+          timestamp: Date.now(),
+          clientId: clientIdRef.current,
+          objectCount: objects.length
+        }
       };
 
-      console.log('[Pusher] Sending canvas-full state');
-      channelRef.current.trigger('client-canvas-full', message);
+      // Verifica dimensione prima di inviare
+      const dataSize = JSON.stringify(minimalState).length;
+      console.log(`[Pusher] Canvas state size: ${dataSize} bytes`);
+
+      if (dataSize > 9000) { // Lascia margine di sicurezza
+        console.warn('[Pusher] Canvas state too large, sending simplified version');
+        // Invia solo metadati se troppo grande
+        const simplifiedState = {
+          metadata: {
+            timestamp: Date.now(),
+            clientId: clientIdRef.current,
+            objectCount: objects.length,
+            tooLarge: true
+          }
+        };
+        channelRef.current.trigger('client-canvas-full', simplifiedState);
+      } else {
+        channelRef.current.trigger('client-canvas-full', minimalState);
+      }
+
+      console.log('[Pusher] Canvas full state sent successfully');
     } catch (error) {
-      console.error('[Pusher] Error sending canvas full state:', error);
+      console.error('[Pusher] Error sending canvas state:', error);
     }
-  }, [canvasRef]);
+  }, []);
 
   const sendJournalAction = useCallback((action: any) => {
     if (!channelRef.current) return;
