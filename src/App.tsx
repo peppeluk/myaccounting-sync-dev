@@ -6626,6 +6626,31 @@ function App() {
           connectedUsers={syncConnectedUsers}
         />
 
+        {/* Test Pusher Button */}
+        {syncIsConnected && (
+          <button
+            onClick={() => {
+              console.log('[TEST] Manually sending canvas state...');
+              sendCanvasFullState();
+            }}
+            style={{
+              position: 'fixed',
+              top: '10px',
+              right: '10px',
+              backgroundColor: '#ff6b6b',
+              color: 'white',
+              border: 'none',
+              padding: '8px 12px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              zIndex: 9999
+            }}
+            title="Test Pusher Sync"
+          >
+            🚀 Test Sync
+          </button>
+        )}
+
         {/* Mobile Menu Content - vuoto, i pulsanti principali sono sempre visibili */}
         <div className={`mobile-menu ${isMobileMenuOpen ? 'open' : ''}`} onClick={(e) => e.stopPropagation()}>
           <div className="mobile-menu-row">

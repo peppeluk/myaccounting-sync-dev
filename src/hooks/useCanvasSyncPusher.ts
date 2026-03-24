@@ -338,6 +338,8 @@ export function useCanvasSyncPusher(
         return !obj.isType('selection') && !obj.isType('background');
       });
 
+      console.log(`[Pusher] Found ${objects.length} objects to sync`);
+
       // Crea stato minimale
       const minimalState = {
         objects: objects.map((obj: any) => ({
@@ -388,6 +390,7 @@ export function useCanvasSyncPusher(
         };
         channelRef.current.trigger('client-canvas-full', simplifiedState);
       } else {
+        console.log('[Pusher] Sending canvas-full state:', minimalState);
         channelRef.current.trigger('client-canvas-full', minimalState);
       }
 
