@@ -872,7 +872,7 @@ function App() {
     isApplyingRemoteChangeRef
   } = useCanvasSyncMultiRoom(
     syncCanvasRef,
-    `wss://echo.websocket.events`,
+    `wss://ws.postman-echo.com/raw`,
     `document-0`, // ID documento fisso per ora, poi renderemo dinamico
     journalSyncHandlers,
     boardSyncHandlers
