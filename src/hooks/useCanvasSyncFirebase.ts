@@ -121,6 +121,14 @@ export const useCanvasSyncFirebase = (
   
   const clientIdRef = useRef<string>('');
   
+  // Inizializza clientId se non presente
+  useEffect(() => {
+    if (!clientIdRef.current) {
+      clientIdRef.current = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      console.log('[Firebase] 🆔 Generated client ID:', clientIdRef.current);
+    }
+  }, []);
+  
   // Flag per prevenire loop infinito di sincronizzazione
   const isApplyingRemoteDataRef = useRef<boolean>(false);
 
