@@ -110,20 +110,20 @@ export type SyncRefs = {
  * @param boardSync - Handler per sincronizzazione board
  * @returns Stato connessione e azioni per gestire le stanze
  */
-export function useCanvasSyncFirebase(
+export const useCanvasSyncFirebase = (
   canvasRef: RefObject<any>,
-  journalSync?: JournalSyncHandlers,
-  boardSync?: BoardSyncHandlers
-): SyncState & SyncActions & SyncRefs {
-  
-  // Stati
+  journalSync?: { onAction: (action: any) => void },
+  boardSyncHandlers?: any
+) => {
   const [isConnected, setIsConnected] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<string | null>(null);
-  const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
+  const [connectedUsers, setConnectedUsers] = useState(0);
+  
+  const clientIdRef = useRef<string>('');
+  
+  // Flag per prevenire loop infinito di sincronizzazione
+  const isApplyingRemoteDataRef = useRef<boolean>(false);
 
-  // Refs
-  const wsRef = useRef<any>(null);
-  const clientIdRef = useRef<string>(`client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
   const currentRoomRef = useRef<string | null>(null);
   const listenersRef = useRef<any[]>([]);
 
@@ -175,7 +175,7 @@ export function useCanvasSyncFirebase(
         ...user,
         connectedAt: user.connectedAt || Date.now()
       }));
-      setConnectedUsers(usersList);
+      setConnectedUsers(usersList.length);
     });
 
     // Ascolta eventi canvas
@@ -188,6 +188,9 @@ export function useCanvasSyncFirebase(
       
       if (data.clientId !== clientIdRef.current && canvasRef.current && data.state) {
         console.log('[Firebase] 🎯 Processing canvas data:', data);
+        
+        // Imposta flag per prevenire loop infinito
+        isApplyingRemoteDataRef.current = true;
         
         // Applica dati al canvas
         try {
@@ -232,14 +235,24 @@ export function useCanvasSyncFirebase(
               window.dispatchEvent(new CustomEvent('sync-canvas-remote-applied', {
                 detail: { source: 'firebase', objectsCount: data.state.objects.length }
               }));
+              
+              // Resetta flag dopo un breve ritardo per permettere ad altri eventi di completarsi
+              setTimeout(() => {
+                isApplyingRemoteDataRef.current = false;
+                console.log('[Firebase] 🔄 Remote data application flag reset');
+              }, 100);
+              
             }).catch((error) => {
               console.error('[Firebase] 💥 Error enlivening objects:', error);
+              isApplyingRemoteDataRef.current = false;
             });
           } else {
             console.warn('[Firebase] ❌ Invalid fabric module or objects data');
+            isApplyingRemoteDataRef.current = false;
           }
         } catch (error) {
           console.error('[Firebase] 💥 Error applying canvas state:', error);
+          isApplyingRemoteDataRef.current = false;
         }
       } else {
         console.log('[Firebase] ⏭️ Skipping canvas data - conditions not met');
@@ -270,9 +283,19 @@ export function useCanvasSyncFirebase(
     // Ascolta eventi board
     const boardListener = onChildAdded(boardDataRef, (snapshot) => {
       const data = snapshot.val();
-      if (data.clientId !== clientIdRef.current && boardSync?.onAction) {
-        console.log('[Firebase] Received board action:', data);
-        boardSync.onAction(data.action);
+      console.log('[Firebase] 📥 RAW board data received:', data);
+      console.log('[Firebase] 🔍 Client ID check:', data.clientId, 'vs', clientIdRef.current);
+      
+      if (data.clientId !== clientIdRef.current && boardSyncHandlers?.onAction) {
+        console.log('[Firebase] 🎯 Processing board action:', data.action);
+        try {
+          boardSyncHandlers.onAction(data.action);
+          console.log('[Firebase] ✅ Board action applied successfully');
+        } catch (error) {
+          console.error('[Firebase] 💥 Error applying board action:', error);
+        }
+      } else {
+        console.log('[Firebase] ⏭️ Skipping board data - conditions not met');
       }
     });
 
@@ -320,7 +343,7 @@ export function useCanvasSyncFirebase(
     // Resetta stato
     setCurrentRoom(null);
     currentRoomRef.current = null;
-    setConnectedUsers([]);
+    setConnectedUsers(0);
     setIsConnected(false);
   }, [database, clearListeners]);
 
@@ -377,6 +400,12 @@ export function useCanvasSyncFirebase(
 
   // Invia stato completo canvas
   const sendCanvasFullState = useCallback(() => {
+    // Non inviare se stiamo applicando dati remoti per prevenire loop infinito
+    if (isApplyingRemoteDataRef.current) {
+      console.log('[Firebase] ⏭️ Skipping canvas send - currently applying remote data');
+      return;
+    }
+    
     if (!database || !currentRoomRef.current || !canvasRef.current) {
       console.log('[Firebase] Cannot send canvas state - not connected');
       return;
@@ -452,7 +481,6 @@ export function useCanvasSyncFirebase(
     sendJournalState,
     sendBoardState,
     sendCanvasFullState,
-    wsRef,
     clientIdRef,
     currentRoomRef
   };

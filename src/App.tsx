@@ -862,17 +862,15 @@ function App() {
   
   const {
     isConnected: syncIsConnected,
-    currentRoom: syncCurrentRoom,
-    connectedUsers: syncConnectedUsers,
     joinRoom: syncJoinRoom,
     leaveRoom: syncLeaveRoom,
-    wsRef: syncWsRef,
-    clientIdRef: syncClientIdRef,
-    currentRoomRef: syncCurrentRoomRef,
     sendJournalAction,
     sendJournalState,
     sendBoardState,
-    sendCanvasFullState
+    sendCanvasFullState,
+    currentRoom: syncCurrentRoom,
+    connectedUsers: syncConnectedUsers,
+    currentRoomRef: syncCurrentRoomRef
   } = useCanvasSyncFirebase(
     syncCanvasRef,
     journalSyncHandlers,
@@ -2474,7 +2472,7 @@ function App() {
     console.log('🔍 [DEBUG] Canvas sync state:', {
       isConnected: syncIsConnected,
       currentRoom: syncCurrentRoom,
-      connectedUsers: syncConnectedUsers.length
+      connectedUsers: syncConnectedUsers
     });
     const resolvedPageId = pageId ?? getCurrentPageId();
     if (!resolvedPageId) {
@@ -5157,19 +5155,11 @@ function App() {
 
         // Sync: invia il path appena creato
         const pathObj = (event as any)?.path;
-        if (pathObj && syncCurrentRoomRef.current && syncWsRef.current?.readyState === WebSocket.OPEN) {
+        if (pathObj && syncCurrentRoomRef.current) {
           if (!pathObj.id) {
             pathObj.id = `obj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           }
-          syncWsRef.current.send(JSON.stringify({
-            type: 'canvas-update',
-            update: {
-              type: 'object:added',
-              data: { ...pathObj.toJSON(['id']), id: pathObj.id },
-              timestamp: Date.now()
-            },
-            clientId: syncClientIdRef.current
-          }));
+          // Firebase sync gestito automaticamente dal hook
         }
       };
       const onObjectModified = () => {

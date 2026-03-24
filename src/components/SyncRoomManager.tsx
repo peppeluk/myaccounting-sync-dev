@@ -5,14 +5,13 @@
 // Path: apps/web/src/components/SyncRoomManager.tsx
 
 import { useState, useEffect } from 'react';
-import type { ConnectedUser } from '../hooks/useCanvasSyncMultiRoom';
 
 type SyncRoomManagerProps = {
   isConnected: boolean;
   currentRoom: string | null;
   onJoinRoom: (roomId: string, nickname?: string, ipAddress?: string) => void;
   onLeaveRoom: () => void;
-  connectedUsers?: ConnectedUser[];
+  connectedUsers?: number;
 };
 
 export function SyncRoomManager({
@@ -20,7 +19,7 @@ export function SyncRoomManager({
   currentRoom,
   onJoinRoom,
   onLeaveRoom,
-  connectedUsers = []
+  connectedUsers = 0
 }: SyncRoomManagerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [roomInput, setRoomInput] = useState('');
@@ -151,7 +150,7 @@ export function SyncRoomManager({
       <button
         onClick={() => setIsOpen(true)}
         className={`toolbar-button ${isConnected ? 'active' : ''}`}
-        title={isConnected ? `Connesso: ${currentRoom} (${connectedUsers.length} utenti)` : 'Sincronizzazione LAN'}
+        title={isConnected ? `Connesso: ${currentRoom} (${connectedUsers} utenti)` : 'Sincronizzazione LAN'}
         style={{ 
           border: '2px solid red', 
           backgroundColor: 'yellow', 
@@ -167,9 +166,9 @@ export function SyncRoomManager({
             <span style={{ fontSize: '11px', marginLeft: '4px', fontWeight: '600' }}>
               {currentRoom}
             </span>
-            {connectedUsers.length > 1 && (
+            {connectedUsers > 1 && (
               <span style={{ fontSize: '10px', marginLeft: '4px', background: '#eff6ff', padding: '2px 6px', borderRadius: '8px', color: '#3b82f6' }}>
-                {connectedUsers.length}
+                {connectedUsers}
               </span>
             )}
           </>
@@ -214,30 +213,16 @@ export function SyncRoomManager({
                     </div>
                   )}
 
-                  {connectedUsers.length > 0 && (
+                  {connectedUsers > 0 && (
                     <div className="sync-connected-users">
                       <h4>
                         <i className="fa-solid fa-users" />
-                        Dispositivi connessi ({connectedUsers.length})
+                        Dispositivi connessi ({connectedUsers})
                       </h4>
                       <ul>
-                        {connectedUsers.map((user) => (
-                          <li key={user.clientId}>
-                            <i className="fa-solid fa-tablet-screen-button" />
-                            <div className="user-info">
-                              <span className="user-nickname">
-                                {user.nickname || `Dispositivo ${user.clientId.slice(-6)}`}
-                              </span>
-                              {user.ipAddress && (
-                                <span className="user-ip">
-                                  <i className="fa-solid fa-network-wired" />
-                                  {user.ipAddress}
-                                </span>
-                              )}
-                            </div>
-                            <small className="user-time">
-                              {new Date(user.connectedAt).toLocaleTimeString()}
-                            </small>
+                        {Array.from({ length: connectedUsers }, (_, i) => (
+                          <li key={i}>
+                            Utente {i + 1}
                           </li>
                         ))}
                       </ul>
