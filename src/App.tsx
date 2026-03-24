@@ -6598,6 +6598,7 @@ function App() {
           onJoinRoom={syncJoinRoom}
           onLeaveRoom={syncLeaveRoom}
           connectedUsers={syncConnectedUsers}
+          isAdmin={true}
         />
 
         {/* Mobile Menu Content - vuoto, i pulsanti principali sono sempre visibili */}

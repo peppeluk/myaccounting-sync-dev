@@ -201,6 +201,10 @@ export const useCanvasSyncFirebase = (
         // Applica dati al canvas in modo ottimizzato
         try {
           if (fabric && data.state.objects && Array.isArray(data.state.objects)) {
+            // Disattiva temporaneamente eventi canvas per prevenire loop
+            const originalEvents = canvasRef.current.__eventListeners;
+            canvasRef.current.__eventListeners = {};
+            
             // Usa requestAnimationFrame per non bloccare il thread principale
             requestAnimationFrame(() => {
               try {
@@ -222,18 +226,20 @@ export const useCanvasSyncFirebase = (
                   canvasRef.current.renderOnAddRemove = true;
                   canvasRef.current.renderAll();
                   
-                  console.log(`[Firebase] ✅ Applied ${objects.length} objects`);
-                  
-                  // Resetta flag dopo applicazione completata
+                  // Ripristina eventi dopo un ritardo per permettere completamento
                   setTimeout(() => {
+                    canvasRef.current.__eventListeners = originalEvents;
                     isApplyingRemoteDataRef.current = false;
-                  }, 50);
+                    console.log(`[Firebase] ✅ Applied ${objects.length} objects, events restored`);
+                  }, 100);
                 }).catch((error) => {
                   console.error('[Firebase] 💥 Error enlivening objects:', error);
+                  canvasRef.current.__eventListeners = originalEvents;
                   isApplyingRemoteDataRef.current = false;
                 });
               } catch (error) {
                 console.error('[Firebase] 💥 Error in canvas update:', error);
+                canvasRef.current.__eventListeners = originalEvents;
                 isApplyingRemoteDataRef.current = false;
               }
             });
