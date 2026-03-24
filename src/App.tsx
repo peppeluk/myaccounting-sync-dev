@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { JournalPanel, type JournalEntry } from "./components/JournalPanel";
 import { SyncRoomManager } from "./components/SyncRoomManager";
-import { useCanvasSyncMultiRoom, type BoardSyncState, type JournalSyncAction, type JournalSyncState } from "./hooks/useCanvasSyncMultiRoom";
+import { useCanvasSyncPusher } from './hooks/useCanvasSyncPusher';
 import {
   DEFAULT_JOURNAL_PROFILE_ID,
   JOURNAL_PROFILE_OPTIONS,
@@ -870,9 +870,10 @@ function App() {
     sendBoardState,
     sendCanvasFullState,
     isApplyingRemoteChangeRef
-  } = useCanvasSyncMultiRoom(
+  } = useCanvasSyncPusher(
     syncCanvasRef,
-    ``, // Disabilitato temporaneamente per testare l'interfaccia
+    import.meta.env.VITE_PUSHER_APP_KEY || 'your-pusher-app-key',
+    import.meta.env.VITE_PUSHER_CLUSTER || 'eu',
     `document-0`, // ID documento fisso per ora, poi renderemo dinamico
     journalSyncHandlers,
     boardSyncHandlers
