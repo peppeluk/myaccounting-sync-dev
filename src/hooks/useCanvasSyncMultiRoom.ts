@@ -247,10 +247,15 @@ export function useCanvasSyncMultiRoom(
 
   // Connessione WebSocket
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (!serverUrl) {
+      console.log('[Sync] WebSocket disabled - no server URL provided');
+      return;
+    }
 
-    console.log('[Sync] Connecting to', serverUrl);
-    
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('[Sync] Already connected');
+      return;
+    }
     try {
       const ws = new WebSocket(serverUrl);
       wsRef.current = ws;
@@ -294,9 +299,13 @@ export function useCanvasSyncMultiRoom(
 
   // Join room
   const joinRoom = useCallback((roomId: string, nickname?: string, ipAddress?: string) => {
+    if (!serverUrl) {
+      console.log('[Sync] Cannot join room - WebSocket disabled');
+      return;
+    }
+
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      connect();
-      setTimeout(() => joinRoom(roomId, nickname, ipAddress), 500);
+      console.log('[Sync] Cannot join room - not connected');
       return;
     }
 
@@ -780,19 +789,20 @@ export function useCanvasSyncMultiRoom(
 
   // Connessione automatica al mount
   useEffect(() => {
-    console.log('[Sync] Hook mounted, will connect in 1 second...');
-    const timeoutId = setTimeout(() => {
+    if (!serverUrl) {
+      console.log('[Sync] WebSocket disabled - skipping auto-connect');
+      return;
+    }
+
+    const timer = setTimeout(() => {
       console.log('[Sync] Connecting now...');
       connect();
     }, 1000);
 
     return () => {
-      clearTimeout(timeoutId);
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      clearTimeout(timer);
     };
-  }, [connect]);
+  }, [connect, serverUrl]);
 
   return {
     isConnected,
