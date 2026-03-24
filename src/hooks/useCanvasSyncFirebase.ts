@@ -180,58 +180,91 @@ export function useCanvasSyncFirebase(
     // Ascolta eventi canvas
     const canvasListener = onChildAdded(canvasEventsRef, (snapshot) => {
       const data = snapshot.val();
+      console.log('[Firebase] 📥 RAW canvas data received:', data);
+      console.log('[Firebase] 🔍 Canvas ref available:', !!canvasRef.current);
+      console.log('[Firebase] 🔍 Client ID check:', data.clientId, 'vs', clientIdRef.current);
+      console.log('[Firebase] 🔍 State data:', !!data.state);
+      
       if (data.clientId !== clientIdRef.current && canvasRef.current && data.state) {
-        console.log('[Firebase] Received canvas data:', data);
+        console.log('[Firebase] 🎯 Processing canvas data:', data);
         
         // Applica dati al canvas
         try {
           const fabricModule = (window as any).fabric;
+          console.log('[Firebase] 🔧 Fabric module available:', !!fabricModule);
+          console.log('[Firebase] 🔧 Objects count:', data.state.objects?.length);
+          
           if (fabricModule && data.state.objects && Array.isArray(data.state.objects)) {
+            console.log('[Firebase] 🧹 Clearing canvas...');
             // Pulisci canvas esistente
             canvasRef.current.clear();
             
+            console.log('[Firebase] 🎨 Recreating objects...');
             // Ricrea gli oggetti dallo stato ricevuto
-            data.state.objects.forEach((objData: any) => {
+            data.state.objects.forEach((objData: any, index: number) => {
               try {
+                console.log(`[Firebase] 📦 Object ${index}:`, objData.type);
                 const obj = fabricModule.util.enlivenObjects([objData])[0];
                 if (obj) {
                   canvasRef.current.add(obj);
+                  console.log(`[Firebase] ✅ Object ${index} added`);
+                } else {
+                  console.warn(`[Firebase] ❌ Object ${index} failed to enliven`);
                 }
               } catch (error) {
-                console.warn('[Firebase] Error recreating object:', error);
+                console.warn(`[Firebase] ❌ Error recreating object ${index}:`, error);
               }
             });
             
             // Imposta background e viewport
             if (data.state.background) {
               canvasRef.current.backgroundColor = data.state.background;
+              console.log('[Firebase] 🎨 Background set:', data.state.background);
             }
             if (data.state.viewportTransform) {
               canvasRef.current.setViewportTransform(data.state.viewportTransform);
+              console.log('[Firebase] 🔍 Viewport transform set');
             }
             
             // Renderizza il canvas
+            console.log('[Firebase] 🖼️ Rendering canvas...');
             canvasRef.current.renderAll();
             
-            console.log('[Firebase] Canvas state applied successfully with', data.state.objects.length, 'objects');
+            console.log('[Firebase] ✅ Canvas state applied successfully with', data.state.objects.length, 'objects');
             
             // Trigger evento per notificare l'applicazione
             window.dispatchEvent(new CustomEvent('sync-canvas-remote-applied', {
-              detail: { source: 'firebase' }
+              detail: { source: 'firebase', objectsCount: data.state.objects.length }
             }));
+          } else {
+            console.warn('[Firebase] ❌ Invalid fabric module or objects data');
           }
         } catch (error) {
-          console.error('[Firebase] Error applying canvas state:', error);
+          console.error('[Firebase] 💥 Error applying canvas state:', error);
         }
+      } else {
+        console.log('[Firebase] ⏭️ Skipping canvas data - conditions not met');
       }
     });
 
     // Ascolta eventi journal
     const journalListener = onChildAdded(journalDataRef, (snapshot) => {
       const data = snapshot.val();
+      console.log('[Firebase] 📥 RAW journal data received:', data);
+      console.log('[Firebase] 🔍 Client ID check:', data.clientId, 'vs', clientIdRef.current);
+      console.log('[Firebase] 🔍 Journal sync available:', !!journalSync);
+      console.log('[Firebase] 🔍 Journal onAction available:', !!journalSync?.onAction);
+      
       if (data.clientId !== clientIdRef.current && journalSync?.onAction) {
-        console.log('[Firebase] Received journal action:', data);
-        journalSync.onAction(data.action);
+        console.log('[Firebase] 🎯 Processing journal action:', data.action);
+        try {
+          journalSync.onAction(data.action);
+          console.log('[Firebase] ✅ Journal action applied successfully');
+        } catch (error) {
+          console.error('[Firebase] 💥 Error applying journal action:', error);
+        }
+      } else {
+        console.log('[Firebase] ⏭️ Skipping journal data - conditions not met');
       }
     });
 
