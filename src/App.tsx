@@ -876,7 +876,7 @@ function App() {
     isApplyingRemoteChangeRef
   } = useCanvasSyncMultiRoom(
     syncCanvasRef,
-    '', // Disabilitato WebSocket temporaneamente
+    `wss://${window.location.hostname}:3001`,
     `document-0`,
     journalSyncHandlers,
     boardSyncHandlers
