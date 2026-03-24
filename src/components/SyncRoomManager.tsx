@@ -11,7 +11,9 @@ type SyncRoomManagerProps = {
   currentRoom: string | null;
   onJoinRoom: (roomId: string, nickname?: string, ipAddress?: string) => void;
   onLeaveRoom: () => void;
+  onDisconnectUser?: (userKey: string) => void;
   connectedUsers?: number;
+  isAdmin?: boolean;
 };
 
 export function SyncRoomManager({
@@ -19,7 +21,9 @@ export function SyncRoomManager({
   currentRoom,
   onJoinRoom,
   onLeaveRoom,
-  connectedUsers = 0
+  onDisconnectUser,
+  connectedUsers = 0,
+  isAdmin = false
 }: SyncRoomManagerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [roomInput, setRoomInput] = useState('');
@@ -218,11 +222,41 @@ export function SyncRoomManager({
                       <h4>
                         <i className="fa-solid fa-users" />
                         Dispositivi connessi ({connectedUsers})
+                        {isAdmin && onDisconnectUser && (
+                          <button 
+                            onClick={() => {
+                              if (confirm('Disconnettere tutti gli altri utenti?')) {
+                                // TODO: Implementare disconnessione di massa
+                                console.log('Disconnect all users requested');
+                              }
+                            }}
+                            className="btn-small btn-danger"
+                            style={{ marginLeft: '10px', fontSize: '11px' }}
+                            title="Disconnetti tutti gli altri utenti"
+                          >
+                            <i className="fa-solid fa-user-slash" />
+                          </button>
+                        )}
                       </h4>
                       <ul>
                         {Array.from({ length: connectedUsers }, (_, i) => (
                           <li key={i}>
                             Utente {i + 1}
+                            {isAdmin && onDisconnectUser && i > 0 && (
+                              <button 
+                                onClick={() => {
+                                  if (confirm(`Disconnettere Utente ${i + 1}?`)) {
+                                    // TODO: Implementare disconnessione singolo utente
+                                    console.log(`Disconnect user ${i + 1} requested`);
+                                  }
+                                }}
+                                className="btn-small btn-danger"
+                                style={{ marginLeft: '10px', fontSize: '10px' }}
+                                title={`Disconnetti Utente ${i + 1}`}
+                              >
+                                <i className="fa-solid fa-times" />
+                              </button>
+                            )}
                           </li>
                         ))}
                       </ul>

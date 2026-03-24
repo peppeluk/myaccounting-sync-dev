@@ -195,64 +195,47 @@ export const useCanvasSyncFirebase = (
       console.log('[Firebase] 🔍 State data:', !!data.state);
       
       if (data.clientId !== clientIdRef.current && canvasRef.current && data.state) {
-        console.log('[Firebase] 🎯 Processing canvas data:', data);
-        
         // Imposta flag per prevenire loop infinito
         isApplyingRemoteDataRef.current = true;
         
-        // Applica dati al canvas
+        // Applica dati al canvas in modo ottimizzato
         try {
-          console.log('[Firebase] 🔧 Fabric module available:', !!fabric);
-          console.log('[Firebase] 🔧 Objects count:', data.state.objects?.length);
-          
           if (fabric && data.state.objects && Array.isArray(data.state.objects)) {
-            console.log('[Firebase] 🧹 Clearing canvas...');
-            // Pulisci canvas esistente
-            canvasRef.current.clear();
-            
-            console.log('[Firebase] 🎨 Recreating objects...');
-            // Ricrea gli oggetti dallo stato ricevuto
-            fabric.util.enlivenObjects(data.state.objects).then((objects) => {
-              objects.forEach((obj: any, index: number) => {
-                try {
-                  console.log(`[Firebase] 📦 Object ${index}:`, obj.type);
-                  if (obj) {
-                    canvasRef.current.add(obj);
-                    console.log(`[Firebase] ✅ Object ${index} added`);
-                  } else {
-                    console.warn(`[Firebase] ❌ Object ${index} failed to enliven`);
-                  }
-                } catch (error) {
-                  console.warn(`[Firebase] ❌ Error recreating object ${index}:`, error);
-                }
-              });
-              
-              // Imposta background e viewport
-              if (data.state.background) {
-                canvasRef.current.backgroundColor = data.state.background;
-                console.log('[Firebase] 🎨 Background set:', data.state.background);
-              }
-              if (data.state.viewportTransform) {
-                canvasRef.current.setViewportTransform(data.state.viewportTransform);
-                console.log('[Firebase] 🔍 Viewport transform set');
-              }
-              
-              // Renderizza il canvas
-              canvasRef.current.renderAll();
-              console.log('[Firebase] ✅ Canvas state applied successfully with', data.state.objects.length, 'objects');
-              window.dispatchEvent(new CustomEvent('sync-canvas-remote-applied', {
-                detail: { source: 'firebase', objectsCount: data.state.objects.length }
-              }));
-              
-              // Resetta flag dopo un breve ritardo per permettere ad altri eventi di completarsi
-              setTimeout(() => {
+            // Usa requestAnimationFrame per non bloccare il thread principale
+            requestAnimationFrame(() => {
+              try {
+                // Pulisci canvas in modo efficiente
+                canvasRef.current.clear();
+                
+                // Ricostruisci oggetti in batch
+                fabric.util.enlivenObjects(data.state.objects).then((objects) => {
+                  // Batch aggiunta oggetti per migliorare performance
+                  canvasRef.current.renderOnAddRemove = false;
+                  
+                  objects.forEach((obj: any) => {
+                    if (obj) {
+                      canvasRef.current.add(obj);
+                    }
+                  });
+                  
+                  // Riabilita rendering e forza un solo render
+                  canvasRef.current.renderOnAddRemove = true;
+                  canvasRef.current.renderAll();
+                  
+                  console.log(`[Firebase] ✅ Applied ${objects.length} objects`);
+                  
+                  // Resetta flag dopo applicazione completata
+                  setTimeout(() => {
+                    isApplyingRemoteDataRef.current = false;
+                  }, 50);
+                }).catch((error) => {
+                  console.error('[Firebase] 💥 Error enlivening objects:', error);
+                  isApplyingRemoteDataRef.current = false;
+                });
+              } catch (error) {
+                console.error('[Firebase] 💥 Error in canvas update:', error);
                 isApplyingRemoteDataRef.current = false;
-                console.log('[Firebase] 🔄 Remote data application flag reset');
-              }, 100);
-              
-            }).catch((error) => {
-              console.error('[Firebase] 💥 Error enlivening objects:', error);
-              isApplyingRemoteDataRef.current = false;
+              }
             });
           } else {
             console.warn('[Firebase] ❌ Invalid fabric module or objects data');
