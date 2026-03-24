@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { JournalPanel, type JournalEntry } from "./components/JournalPanel";
 import { SyncRoomManager } from "./components/SyncRoomManager";
-import { useCanvasSyncPusher } from './hooks/useCanvasSyncPusher';
+import { useCanvasSyncPusher, type JournalSyncState, type BoardSyncState, type BoardSyncHandlers } from './hooks/useCanvasSyncPusher';
 import {
   DEFAULT_JOURNAL_PROFILE_ID,
   JOURNAL_PROFILE_OPTIONS,
@@ -36,6 +36,29 @@ type JournalFieldKey = "date" | "account" | "description" | "debit" | "credit";
 type JournalFieldSelection = { entryId: string; field: JournalFieldKey } | null;
 type JournalScrollPosition = { top: number; left: number } | null;
 type CalculatorTarget = { entryId: string; field: "debit" | "credit" } | null;
+
+type JournalSyncAction = {
+  type: string;
+  entryId?: string;
+  entry?: any;
+  field?: string;
+  value?: any;
+  entries?: any[];
+  selectedProfileId?: string;
+  isJournalOpen?: boolean;
+  isCalculatorOpen?: boolean;
+  calculatorDisplay?: string;
+  selectedField?: { entryId: string; field: string } | null;
+  calculatorTarget?: { entryId: string; field: string } | null;
+  journalScroll?: { top: number; left: number } | null;
+  profileId?: string;
+  isOpen?: boolean;
+  display?: string;
+  target?: { entryId: string; field: string };
+  top?: number;
+  left?: number;
+  patch?: any;
+};
 
 const IS_TEACHER_MODE = import.meta.env.VITE_TEACHER_MODE === "true";
 const TEACHER_TOKEN = import.meta.env.VITE_TEACHER_TOKEN;
@@ -609,10 +632,10 @@ function App() {
         applyJournalEntryAdd(action.entry as JournalEntry);
         break;
       case "journal-update":
-        applyJournalEntryUpdate(action.entryId, action.patch ?? {});
+        applyJournalEntryUpdate(action.entryId!, action.patch ?? {});
         break;
       case "journal-remove":
-        applyJournalEntryRemove(action.entryId);
+        applyJournalEntryRemove(action.entryId!);
         break;
       case "journal-set":
         applyJournalState({
@@ -623,7 +646,7 @@ function App() {
           calculatorDisplay: action.calculatorDisplay,
           selectedField: action.selectedField ?? null,
           calculatorTarget: action.calculatorTarget ?? null,
-          journalScroll: action.journalScroll ?? null
+          journalScroll: action.journalScroll ?? { top: 0, left: 0 }
         });
         break;
       case "journal-profile":
@@ -675,8 +698,8 @@ function App() {
         }
         break;
       case "journal-scroll":
-        if (Number.isFinite(action.top) && Number.isFinite(action.left)) {
-          const nextScroll = { top: action.top, left: action.left };
+        if (Number.isFinite(action.top!) && Number.isFinite(action.left!)) {
+          const nextScroll = { top: action.top!, left: action.left! };
           journalScrollPositionRef.current = nextScroll;
           setJournalScrollPosition(nextScroll);
         }
@@ -704,7 +727,7 @@ function App() {
   const isApplyingRemoteBoardStateRef = useRef(false);
   const boardSyncTimeoutRef = useRef<number | null>(null);
 
-  const buildBoardSyncState = useCallback((): BoardSyncState | null => {
+  const buildBoardSyncState = useCallback((): BoardSyncState => {
     const container = containerRef.current;
     const scrollTop = container?.scrollTop ?? 0;
     const scrollLeft = container?.scrollLeft ?? 0;
@@ -846,9 +869,13 @@ function App() {
     }
   }, [persistDocument, setCurrentPageIndex, syncCanvasOffset]);
 
-  const boardSyncHandlers = useMemo(() => ({
+  const boardSyncHandlers: BoardSyncHandlers = useMemo(() => ({
     getState: buildBoardSyncState,
-    onState: applyBoardSyncState
+    onState: applyBoardSyncState,
+    onAction: (action: any) => {
+      console.log('[Board] Received action:', action);
+      // Implementa qui la logica per le azioni board
+    }
   }), [applyBoardSyncState, buildBoardSyncState]);
 
   // SYNC MULTI-ROOM
@@ -858,7 +885,6 @@ function App() {
   const {
     isConnected: syncIsConnected,
     currentRoom: syncCurrentRoom,
-    latency: syncLatency,
     connectedUsers: syncConnectedUsers,
     joinRoom: syncJoinRoom,
     leaveRoom: syncLeaveRoom,
@@ -874,7 +900,6 @@ function App() {
     syncCanvasRef,
     import.meta.env.VITE_PUSHER_APP_KEY || 'your-pusher-app-key',
     import.meta.env.VITE_PUSHER_CLUSTER || 'eu',
-    `document-0`, // ID documento fisso per ora, poi renderemo dinamico
     journalSyncHandlers,
     boardSyncHandlers
   );
@@ -6596,7 +6621,6 @@ function App() {
         <SyncRoomManager
           isConnected={syncIsConnected}
           currentRoom={syncCurrentRoom}
-          latency={syncLatency}
           onJoinRoom={syncJoinRoom}
           onLeaveRoom={syncLeaveRoom}
           connectedUsers={syncConnectedUsers}

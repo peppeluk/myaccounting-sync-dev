@@ -16,7 +16,6 @@ export type ConnectedUser = {
 export type SyncState = {
   isConnected: boolean;
   currentRoom: string | null;
-  latency: number | null;
   connectedUsers: ConnectedUser[];
 };
 
@@ -117,7 +116,6 @@ export function useCanvasSyncPusher(
   canvasRef: RefObject<any>,
   appKey: string,
   cluster: string,
-  documentId?: string,
   journalSync?: JournalSyncHandlers,
   boardSync?: BoardSyncHandlers
 ): SyncState & SyncActions & SyncRefs {
@@ -133,7 +131,6 @@ export function useCanvasSyncPusher(
 
   const [isConnected, setIsConnected] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<string | null>(null);
-  const [latency, setLatency] = useState<number | null>(null);
   const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
 
   useEffect(() => {
@@ -409,7 +406,6 @@ export function useCanvasSyncPusher(
   return {
     isConnected,
     currentRoom,
-    latency,
     connectedUsers,
     joinRoom,
     leaveRoom,
