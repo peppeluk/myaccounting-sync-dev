@@ -180,10 +180,49 @@ export function useCanvasSyncFirebase(
     // Ascolta eventi canvas
     const canvasListener = onChildAdded(canvasEventsRef, (snapshot) => {
       const data = snapshot.val();
-      if (data.clientId !== clientIdRef.current && canvasRef.current) {
+      if (data.clientId !== clientIdRef.current && canvasRef.current && data.state) {
         console.log('[Firebase] Received canvas data:', data);
+        
         // Applica dati al canvas
-        // TODO: Implementare applicazione dati canvas
+        try {
+          const fabricModule = (window as any).fabric;
+          if (fabricModule && data.state.objects && Array.isArray(data.state.objects)) {
+            // Pulisci canvas esistente
+            canvasRef.current.clear();
+            
+            // Ricrea gli oggetti dallo stato ricevuto
+            data.state.objects.forEach((objData: any) => {
+              try {
+                const obj = fabricModule.util.enlivenObjects([objData])[0];
+                if (obj) {
+                  canvasRef.current.add(obj);
+                }
+              } catch (error) {
+                console.warn('[Firebase] Error recreating object:', error);
+              }
+            });
+            
+            // Imposta background e viewport
+            if (data.state.background) {
+              canvasRef.current.backgroundColor = data.state.background;
+            }
+            if (data.state.viewportTransform) {
+              canvasRef.current.setViewportTransform(data.state.viewportTransform);
+            }
+            
+            // Renderizza il canvas
+            canvasRef.current.renderAll();
+            
+            console.log('[Firebase] Canvas state applied successfully with', data.state.objects.length, 'objects');
+            
+            // Trigger evento per notificare l'applicazione
+            window.dispatchEvent(new CustomEvent('sync-canvas-remote-applied', {
+              detail: { source: 'firebase' }
+            }));
+          }
+        } catch (error) {
+          console.error('[Firebase] Error applying canvas state:', error);
+        }
       }
     });
 
