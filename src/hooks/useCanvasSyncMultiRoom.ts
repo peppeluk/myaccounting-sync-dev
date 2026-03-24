@@ -63,15 +63,16 @@ export type JournalSyncAction =
   | { type: 'calculator-target'; target: { entryId: string; field: string } | null }
   | { type: 'journal-scroll'; top: number; left: number };
 
-type JournalSyncHandlers = {
-  getState?: () => JournalSyncState | null;
-  onAction?: (action: JournalSyncAction) => void;
-  onState?: (state: JournalSyncState) => void;
+export type JournalSyncHandlers = {
+  getState: () => JournalSyncState;
+  onAction: (action: JournalSyncAction) => void;
+  onState: (state: JournalSyncState) => void;
 };
 
-type BoardSyncHandlers = {
-  getState?: () => BoardSyncState | null;
-  onState?: (state: BoardSyncState) => void;
+export type BoardSyncHandlers = {
+  getState: () => BoardSyncState;
+  onState: (state: BoardSyncState) => void;
+  onAction: (action: any) => void;
 };
 
 export type SyncActions = {

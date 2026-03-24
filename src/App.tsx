@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { JournalPanel, type JournalEntry } from "./components/JournalPanel";
 import { SyncRoomManager } from "./components/SyncRoomManager";
-import { useCanvasSyncPusher, type JournalSyncState, type BoardSyncState, type BoardSyncHandlers } from './hooks/useCanvasSyncPusher';
+import { useCanvasSyncMultiRoom, type JournalSyncState, type BoardSyncState, type BoardSyncHandlers, type JournalSyncAction } from './hooks/useCanvasSyncMultiRoom';
 import {
   DEFAULT_JOURNAL_PROFILE_ID,
   JOURNAL_PROFILE_OPTIONS,
@@ -36,29 +36,6 @@ type JournalFieldKey = "date" | "account" | "description" | "debit" | "credit";
 type JournalFieldSelection = { entryId: string; field: JournalFieldKey } | null;
 type JournalScrollPosition = { top: number; left: number } | null;
 type CalculatorTarget = { entryId: string; field: "debit" | "credit" } | null;
-
-type JournalSyncAction = {
-  type: string;
-  entryId?: string;
-  entry?: any;
-  field?: string;
-  value?: any;
-  entries?: any[];
-  selectedProfileId?: string;
-  isJournalOpen?: boolean;
-  isCalculatorOpen?: boolean;
-  calculatorDisplay?: string;
-  selectedField?: { entryId: string; field: string } | null;
-  calculatorTarget?: { entryId: string; field: string } | null;
-  journalScroll?: { top: number; left: number } | null;
-  profileId?: string;
-  isOpen?: boolean;
-  display?: string;
-  target?: { entryId: string; field: string };
-  top?: number;
-  left?: number;
-  patch?: any;
-};
 
 const IS_TEACHER_MODE = import.meta.env.VITE_TEACHER_MODE === "true";
 const TEACHER_TOKEN = import.meta.env.VITE_TEACHER_TOKEN;
@@ -885,6 +862,7 @@ function App() {
   const {
     isConnected: syncIsConnected,
     currentRoom: syncCurrentRoom,
+    latency: syncLatency,
     connectedUsers: syncConnectedUsers,
     joinRoom: syncJoinRoom,
     leaveRoom: syncLeaveRoom,
@@ -896,10 +874,10 @@ function App() {
     sendBoardState,
     sendCanvasFullState,
     isApplyingRemoteChangeRef
-  } = useCanvasSyncPusher(
+  } = useCanvasSyncMultiRoom(
     syncCanvasRef,
-    import.meta.env.VITE_PUSHER_APP_KEY || 'your-pusher-app-key',
-    import.meta.env.VITE_PUSHER_CLUSTER || 'eu',
+    `wss://${window.location.hostname}:3001`,
+    `document-0`,
     journalSyncHandlers,
     boardSyncHandlers
   );
@@ -6621,35 +6599,11 @@ function App() {
         <SyncRoomManager
           isConnected={syncIsConnected}
           currentRoom={syncCurrentRoom}
+          latency={syncLatency}
           onJoinRoom={syncJoinRoom}
           onLeaveRoom={syncLeaveRoom}
           connectedUsers={syncConnectedUsers}
         />
-
-        {/* Test Pusher Button */}
-        {syncIsConnected && (
-          <button
-            onClick={() => {
-              console.log('[TEST] Manually sending canvas state...');
-              sendCanvasFullState();
-            }}
-            style={{
-              position: 'fixed',
-              top: '10px',
-              right: '10px',
-              backgroundColor: '#ff6b6b',
-              color: 'white',
-              border: 'none',
-              padding: '8px 12px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              zIndex: 9999
-            }}
-            title="Test Pusher Sync"
-          >
-            🚀 Test Sync
-          </button>
-        )}
 
         {/* Mobile Menu Content - vuoto, i pulsanti principali sono sempre visibili */}
         <div className={`mobile-menu ${isMobileMenuOpen ? 'open' : ''}`} onClick={(e) => e.stopPropagation()}>
