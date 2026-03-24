@@ -1,0 +1,30 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": true,
+    "rooms": {
+      ".read": true,
+      ".write": true,
+      "$roomId": {
+        ".read": true,
+        ".write": true,
+        "users": {
+          ".read": true,
+          ".write": true
+        },
+        "canvas": {
+          ".read": true,
+          ".write": true
+        },
+        "journal": {
+          ".read": true,
+          ".write": true
+        },
+        "board": {
+          ".read": true,
+          ".write": true
+        }
+      }
+    }
+  }
+}
