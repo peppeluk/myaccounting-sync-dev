@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { JournalPanel, type JournalEntry } from "./components/JournalPanel";
 import { SyncRoomManager } from "./components/SyncRoomManager";
-import { useCanvasSyncPusher, type JournalSyncState, type BoardSyncState, type BoardSyncHandlers } from './hooks/useCanvasSyncPusher';
+import { useCanvasSyncFirebase, type JournalSyncState, type BoardSyncState, type BoardSyncHandlers } from './hooks/useCanvasSyncFirebase';
 import { type JournalSyncAction } from './hooks/useCanvasSyncMultiRoom';
 import {
   DEFAULT_JOURNAL_PROFILE_ID,
@@ -872,12 +872,9 @@ function App() {
     sendJournalAction,
     sendJournalState,
     sendBoardState,
-    sendCanvasFullState,
-    isApplyingRemoteChangeRef
-  } = useCanvasSyncPusher(
+    sendCanvasFullState
+  } = useCanvasSyncFirebase(
     syncCanvasRef,
-    import.meta.env.VITE_PUSHER_APP_KEY || 'your-pusher-app-key',
-    import.meta.env.VITE_PUSHER_CLUSTER || 'eu',
     journalSyncHandlers,
     boardSyncHandlers
   );
@@ -2474,12 +2471,11 @@ function App() {
       return;
     }
     // 🚫 BLOCCA SYNC durante applicazione stato remoto per evitare loop infinito
-    console.log('🔍 [DEBUG] isApplyingRemoteChangeRef:', isApplyingRemoteChangeRef);
-    console.log('🔍 [DEBUG] isApplyingRemoteChangeRef.current:', isApplyingRemoteChangeRef?.current);
-    if (isApplyingRemoteChangeRef?.current) {
-      console.log('🚫 [SYNC] Skipping - applying remote change');
-      return;
-    }
+    console.log('🔍 [DEBUG] Canvas sync state:', {
+      isConnected: syncIsConnected,
+      currentRoom: syncCurrentRoom,
+      connectedUsers: syncConnectedUsers.length
+    });
     const resolvedPageId = pageId ?? getCurrentPageId();
     if (!resolvedPageId) {
       return;
@@ -2489,6 +2485,16 @@ function App() {
       // Se non c'è nuovo snapshot (canvas non montato), mantieni i dati esistenti
       return;
     }
+    console.log('📝 [SYNC] Pushing history state for page:', resolvedPageId);
+    window.history.pushState(
+      {
+        pageId: resolvedPageId,
+        snapshot: snapshot,
+        fromSync: true
+      },
+      '',
+      `#page-${resolvedPageId}`
+    );
 
     const pageHistory = historyStacksRef.current[resolvedPageId] ?? { undo: [], redo: [] };
     if (pageHistory.undo[pageHistory.undo.length - 1] === snapshot) {
