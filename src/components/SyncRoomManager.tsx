@@ -10,7 +10,6 @@ import type { ConnectedUser } from '../hooks/useCanvasSyncMultiRoom';
 type SyncRoomManagerProps = {
   isConnected: boolean;
   currentRoom: string | null;
-  latency: number | null;
   onJoinRoom: (roomId: string, nickname?: string, ipAddress?: string) => void;
   onLeaveRoom: () => void;
   connectedUsers?: ConnectedUser[];
@@ -19,7 +18,6 @@ type SyncRoomManagerProps = {
 export function SyncRoomManager({
   isConnected,
   currentRoom,
-  latency,
   onJoinRoom,
   onLeaveRoom,
   connectedUsers = []
@@ -174,11 +172,6 @@ export function SyncRoomManager({
                 {connectedUsers.length}
               </span>
             )}
-            {latency !== null && (
-              <small style={{ fontSize: '9px', marginLeft: '4px', color: '#64748b' }}>
-                {latency}ms
-              </small>
-            )}
           </>
         )}
       </button>
@@ -208,13 +201,6 @@ export function SyncRoomManager({
                       <span className="sync-room-name">{currentRoom}</span>
                     </div>
                   </div>
-
-                  {latency !== null && (
-                    <div className="sync-status-metric">
-                      <i className="fa-solid fa-gauge" />
-                      <span>Latenza: <strong>{latency}ms</strong></span>
-                    </div>
-                  )}
 
                   {(useManualIP ? manualIP : ipAddress) && (
                     <div className="sync-status-metric">

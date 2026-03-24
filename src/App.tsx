@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { JournalPanel, type JournalEntry } from "./components/JournalPanel";
 import { SyncRoomManager } from "./components/SyncRoomManager";
-import { useCanvasSyncMultiRoom, type JournalSyncState, type BoardSyncState, type BoardSyncHandlers, type JournalSyncAction } from './hooks/useCanvasSyncMultiRoom';
+import { useCanvasSyncPusher, type JournalSyncState, type BoardSyncState, type BoardSyncHandlers } from './hooks/useCanvasSyncPusher';
+import { type JournalSyncAction } from './hooks/useCanvasSyncMultiRoom';
 import {
   DEFAULT_JOURNAL_PROFILE_ID,
   JOURNAL_PROFILE_OPTIONS,
@@ -862,7 +863,6 @@ function App() {
   const {
     isConnected: syncIsConnected,
     currentRoom: syncCurrentRoom,
-    latency: syncLatency,
     connectedUsers: syncConnectedUsers,
     joinRoom: syncJoinRoom,
     leaveRoom: syncLeaveRoom,
@@ -874,10 +874,10 @@ function App() {
     sendBoardState,
     sendCanvasFullState,
     isApplyingRemoteChangeRef
-  } = useCanvasSyncMultiRoom(
+  } = useCanvasSyncPusher(
     syncCanvasRef,
-    `wss://${window.location.hostname}:3001`,
-    `document-0`,
+    import.meta.env.VITE_PUSHER_APP_KEY || 'your-pusher-app-key',
+    import.meta.env.VITE_PUSHER_CLUSTER || 'eu',
     journalSyncHandlers,
     boardSyncHandlers
   );
@@ -6599,7 +6599,6 @@ function App() {
         <SyncRoomManager
           isConnected={syncIsConnected}
           currentRoom={syncCurrentRoom}
-          latency={syncLatency}
           onJoinRoom={syncJoinRoom}
           onLeaveRoom={syncLeaveRoom}
           connectedUsers={syncConnectedUsers}
