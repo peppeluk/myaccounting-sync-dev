@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, useCallback, type RefObject } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, push, onValue, onChildAdded, serverTimestamp, set, remove } from 'firebase/database';
+import * as fabric from 'fabric';
 
 // Configurazione Firebase
 const firebaseConfig = {
@@ -190,52 +191,50 @@ export function useCanvasSyncFirebase(
         
         // Applica dati al canvas
         try {
-          const fabricModule = (window as any).fabric;
-          console.log('[Firebase] 🔧 Fabric module available:', !!fabricModule);
+          console.log('[Firebase] 🔧 Fabric module available:', !!fabric);
           console.log('[Firebase] 🔧 Objects count:', data.state.objects?.length);
           
-          if (fabricModule && data.state.objects && Array.isArray(data.state.objects)) {
+          if (fabric && data.state.objects && Array.isArray(data.state.objects)) {
             console.log('[Firebase] 🧹 Clearing canvas...');
             // Pulisci canvas esistente
             canvasRef.current.clear();
             
             console.log('[Firebase] 🎨 Recreating objects...');
             // Ricrea gli oggetti dallo stato ricevuto
-            data.state.objects.forEach((objData: any, index: number) => {
-              try {
-                console.log(`[Firebase] 📦 Object ${index}:`, objData.type);
-                const obj = fabricModule.util.enlivenObjects([objData])[0];
-                if (obj) {
-                  canvasRef.current.add(obj);
-                  console.log(`[Firebase] ✅ Object ${index} added`);
-                } else {
-                  console.warn(`[Firebase] ❌ Object ${index} failed to enliven`);
+            fabric.util.enlivenObjects(data.state.objects).then((objects) => {
+              objects.forEach((obj: any, index: number) => {
+                try {
+                  console.log(`[Firebase] 📦 Object ${index}:`, obj.type);
+                  if (obj) {
+                    canvasRef.current.add(obj);
+                    console.log(`[Firebase] ✅ Object ${index} added`);
+                  } else {
+                    console.warn(`[Firebase] ❌ Object ${index} failed to enliven`);
+                  }
+                } catch (error) {
+                  console.warn(`[Firebase] ❌ Error recreating object ${index}:`, error);
                 }
-              } catch (error) {
-                console.warn(`[Firebase] ❌ Error recreating object ${index}:`, error);
+              });
+              
+              // Imposta background e viewport
+              if (data.state.background) {
+                canvasRef.current.backgroundColor = data.state.background;
+                console.log('[Firebase] 🎨 Background set:', data.state.background);
               }
+              if (data.state.viewportTransform) {
+                canvasRef.current.setViewportTransform(data.state.viewportTransform);
+                console.log('[Firebase] 🔍 Viewport transform set');
+              }
+              
+              // Renderizza il canvas
+              canvasRef.current.renderAll();
+              console.log('[Firebase] ✅ Canvas state applied successfully with', data.state.objects.length, 'objects');
+              window.dispatchEvent(new CustomEvent('sync-canvas-remote-applied', {
+                detail: { source: 'firebase', objectsCount: data.state.objects.length }
+              }));
+            }).catch((error) => {
+              console.error('[Firebase] 💥 Error enlivening objects:', error);
             });
-            
-            // Imposta background e viewport
-            if (data.state.background) {
-              canvasRef.current.backgroundColor = data.state.background;
-              console.log('[Firebase] 🎨 Background set:', data.state.background);
-            }
-            if (data.state.viewportTransform) {
-              canvasRef.current.setViewportTransform(data.state.viewportTransform);
-              console.log('[Firebase] 🔍 Viewport transform set');
-            }
-            
-            // Renderizza il canvas
-            console.log('[Firebase] 🖼️ Rendering canvas...');
-            canvasRef.current.renderAll();
-            
-            console.log('[Firebase] ✅ Canvas state applied successfully with', data.state.objects.length, 'objects');
-            
-            // Trigger evento per notificare l'applicazione
-            window.dispatchEvent(new CustomEvent('sync-canvas-remote-applied', {
-              detail: { source: 'firebase', objectsCount: data.state.objects.length }
-            }));
           } else {
             console.warn('[Firebase] ❌ Invalid fabric module or objects data');
           }
