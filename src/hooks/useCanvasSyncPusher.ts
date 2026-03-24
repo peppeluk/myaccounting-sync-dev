@@ -59,7 +59,7 @@ export type BoardSyncHandlers = {
 };
 
 export type SyncActions = {
-  joinRoom: (roomId: string, nickname?: string, ipAddress?: string) => void;
+  joinRoom: (roomId: string) => void;
   leaveRoom: () => void;
   sendJournalAction: (action: any) => void;
   sendJournalState: (state: JournalSyncState) => void;
@@ -111,6 +111,13 @@ function renderIfReady(canvas: any | null): void {
  * @param journalSync - Handler per sincronizzazione journal
  * @param boardSync - Handler per sincronizzazione board
  * @returns Stato connessione e azioni per gestire le stanze
+ * 
+ * @example
+ * const { isConnected, currentRoom, joinRoom, leaveRoom } = useCanvasSyncPusher(
+ *   canvasRef.current,
+ *   'your-pusher-app-key',
+ *   'eu'
+ * );
  */
 export function useCanvasSyncPusher(
   canvasRef: RefObject<any>,
@@ -183,7 +190,7 @@ export function useCanvasSyncPusher(
     };
   }, [appKey, cluster]);
 
-  const joinRoom = useCallback((roomId: string, nickname?: string, ipAddress?: string) => {
+  const joinRoom = useCallback((roomId: string) => {
     if (!pusherRef.current) {
       console.error('[Pusher] Not initialized');
       return;
@@ -197,38 +204,12 @@ export function useCanvasSyncPusher(
 
     console.log('[Pusher] Joining room:', roomId);
     
-    const channel = pusherRef.current.subscribe(`presence-${roomId}`);
+    const channel = pusherRef.current.subscribe(roomId);
     channelRef.current = channel;
 
-    channel.bind('pusher:subscription_succeeded', (members: any) => {
-      console.log('[Pusher] Subscription succeeded, members:', members);
+    channel.bind('pusher:subscription_succeeded', () => {
+      console.log('[Pusher] Subscription succeeded');
       setCurrentRoom(roomId);
-      
-      // Add current user to presence channel
-      const userData = {
-        clientId: clientIdRef.current,
-        nickname: nickname || `User-${clientIdRef.current.slice(-6)}`,
-        ipAddress: ipAddress,
-        connectedAt: Date.now()
-      };
-
-      // Trigger presence event
-      channel.trigger('client-joined', userData);
-    });
-
-    channel.bind('pusher:member_added', (member: any) => {
-      console.log('[Pusher] Member added:', member);
-      setConnectedUsers(prev => [...prev, {
-        clientId: member.id,
-        nickname: member.info?.nickname,
-        ipAddress: member.info?.ipAddress,
-        connectedAt: member.info?.connectedAt || Date.now()
-      }]);
-    });
-
-    channel.bind('pusher:member_removed', (member: any) => {
-      console.log('[Pusher] Member removed:', member);
-      setConnectedUsers(prev => prev.filter(user => user.clientId !== member.id));
     });
 
     // Canvas sync events
