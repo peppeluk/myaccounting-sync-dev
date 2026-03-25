@@ -346,6 +346,12 @@ export const useCanvasSyncFirebase = (
 
   // Invia azione journal
   const sendJournalAction = useCallback((action: any) => {
+    // BLOCCA COMPLETAMENTE SYNC SE NON CONNESSI
+    if (!isConnected) {
+      console.log('[Firebase] ⏸️ Journal sync paused - not connected to any room');
+      return;
+    }
+    
     if (!database || !currentRoomRef.current) {
       console.log('[Firebase] Cannot send journal action - not connected');
       return;
@@ -359,10 +365,16 @@ export const useCanvasSyncFirebase = (
     });
 
     console.log('[Firebase] Sent journal action:', action);
-  }, [database]);
+  }, [database, isConnected]);
 
   // Invia stato journal
   const sendJournalState = useCallback((state: JournalSyncState) => {
+    // BLOCCA COMPLETAMENTE SYNC SE NON CONNESSI
+    if (!isConnected) {
+      console.log('[Firebase] ⏸️ Journal state sync paused - not connected to any room');
+      return;
+    }
+    
     if (!database || !currentRoomRef.current) {
       console.log('[Firebase] Cannot send journal state - not connected');
       return;
@@ -376,10 +388,16 @@ export const useCanvasSyncFirebase = (
     });
 
     console.log('[Firebase] Sent journal state:', state);
-  }, [database]);
+  }, [database, isConnected]);
 
   // Invia stato board
   const sendBoardState = useCallback((state: BoardSyncState) => {
+    // BLOCCA COMPLETAMENTE SYNC SE NON CONNESSI
+    if (!isConnected) {
+      console.log('[Firebase] ⏸️ Board state sync paused - not connected to any room');
+      return;
+    }
+    
     if (!database || !currentRoomRef.current) {
       console.log('[Firebase] Cannot send board state - not connected');
       return;
@@ -393,13 +411,19 @@ export const useCanvasSyncFirebase = (
     });
 
     console.log('[Firebase] Sent board state:', state);
-  }, [database]);
+  }, [database, isConnected]);
 
   // Invia stato completo canvas
   const sendCanvasFullState = useCallback(() => {
     // Non inviare se stiamo applicando dati remoti per prevenire loop infinito
     if (isApplyingRemoteDataRef.current) {
       console.log('[Firebase] ⏭️ Skipping canvas send - currently applying remote data');
+      return;
+    }
+    
+    // BLOCCA COMPLETAMENTE SYNC SE NON CONNESSI
+    if (!isConnected) {
+      console.log('[Firebase] ⏸️ Sync paused - not connected to any room');
       return;
     }
     
@@ -458,7 +482,7 @@ export const useCanvasSyncFirebase = (
     } catch (error) {
       console.error('[Firebase] Error sending canvas state:', error);
     }
-  }, [database, canvasRef]);
+  }, [database, canvasRef, isConnected]);
 
   // Cleanup on unmount
   useEffect(() => {
