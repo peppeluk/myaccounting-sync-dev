@@ -11,9 +11,7 @@ type SyncRoomManagerProps = {
   currentRoom: string | null;
   onJoinRoom: (roomId: string, nickname?: string, ipAddress?: string) => void;
   onLeaveRoom: () => void;
-  onDisconnectUser?: (userKey: string) => void;
   connectedUsers?: number;
-  isAdmin?: boolean;
 };
 
 export function SyncRoomManager({
@@ -21,9 +19,7 @@ export function SyncRoomManager({
   currentRoom,
   onJoinRoom,
   onLeaveRoom,
-  onDisconnectUser,
-  connectedUsers = 0,
-  isAdmin = false
+  connectedUsers = 0
 }: SyncRoomManagerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [roomInput, setRoomInput] = useState('');
@@ -222,7 +218,7 @@ export function SyncRoomManager({
                       <h4>
                         <i className="fa-solid fa-users" />
                         Dispositivi connessi ({connectedUsers})
-                        {isAdmin && onDisconnectUser && (
+                        {connectedUsers > 1 && (
                           <button 
                             onClick={() => {
                               if (confirm('Disconnettere tutti gli altri utenti?')) {
@@ -242,7 +238,7 @@ export function SyncRoomManager({
                         {Array.from({ length: connectedUsers }, (_, i) => (
                           <li key={i}>
                             Utente {i + 1}
-                            {isAdmin && onDisconnectUser && i > 0 && (
+                            {i > 0 && (
                               <button 
                                 onClick={() => {
                                   if (confirm(`Disconnettere Utente ${i + 1}?`)) {
