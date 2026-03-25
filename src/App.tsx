@@ -868,6 +868,8 @@ function App() {
     sendJournalState,
     sendBoardState,
     sendCanvasFullState,
+    disconnectUser,
+    disconnectAllOtherUsers,
     currentRoom: syncCurrentRoom,
     connectedUsers: syncConnectedUsers,
     currentRoomRef: syncCurrentRoomRef
@@ -6597,6 +6599,8 @@ function App() {
           currentRoom={syncCurrentRoom}
           onJoinRoom={syncJoinRoom}
           onLeaveRoom={syncLeaveRoom}
+          onDisconnectUser={disconnectUser}
+          onDisconnectAll={disconnectAllOtherUsers}
           connectedUsers={syncConnectedUsers}
         />
 

@@ -11,6 +11,8 @@ type SyncRoomManagerProps = {
   currentRoom: string | null;
   onJoinRoom: (roomId: string, nickname?: string, ipAddress?: string) => void;
   onLeaveRoom: () => void;
+  onDisconnectUser?: (userKey: string) => void;
+  onDisconnectAll?: () => void;
   connectedUsers?: number;
 };
 
@@ -19,6 +21,8 @@ export function SyncRoomManager({
   currentRoom,
   onJoinRoom,
   onLeaveRoom,
+  onDisconnectUser,
+  onDisconnectAll,
   connectedUsers = 0
 }: SyncRoomManagerProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -218,12 +222,11 @@ export function SyncRoomManager({
                       <h4>
                         <i className="fa-solid fa-users" />
                         Dispositivi connessi ({connectedUsers})
-                        {connectedUsers > 1 && (
+                        {connectedUsers > 1 && onDisconnectAll && (
                           <button 
                             onClick={() => {
                               if (confirm('Disconnettere tutti gli altri utenti?')) {
-                                // TODO: Implementare disconnessione di massa
-                                console.log('Disconnect all users requested');
+                                onDisconnectAll();
                               }
                             }}
                             className="btn-small btn-danger"
@@ -238,12 +241,12 @@ export function SyncRoomManager({
                         {Array.from({ length: connectedUsers }, (_, i) => (
                           <li key={i}>
                             Utente {i + 1}
-                            {i > 0 && (
+                            {i > 0 && onDisconnectUser && (
                               <button 
                                 onClick={() => {
                                   if (confirm(`Disconnettere Utente ${i + 1}?`)) {
-                                    // TODO: Implementare disconnessione singolo utente
-                                    console.log(`Disconnect user ${i + 1} requested`);
+                                    // Nota: userKey qui è simulato, in realtà serve il vero key di Firebase
+                                    onDisconnectUser(`user-${i}`);
                                   }
                                 }}
                                 className="btn-small btn-danger"

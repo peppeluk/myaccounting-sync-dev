@@ -315,6 +315,46 @@ export const useCanvasSyncFirebase = (
     };
   }, [database, clearListeners]);
 
+  // Disconnetti utente specifico
+  const disconnectUser = useCallback((userKey: string) => {
+    if (!database || !currentRoomRef.current) {
+      console.warn('[Firebase] Cannot disconnect user - not connected');
+      return;
+    }
+
+    const userRef = ref(database, `rooms/${currentRoomRef.current}/users/${userKey}`);
+    remove(userRef)
+      .then(() => {
+        console.log(`[Firebase] ✅ Disconnected user: ${userKey}`);
+      })
+      .catch((error) => {
+        console.error('[Firebase] ❌ Error disconnecting user:', error);
+      });
+  }, [database]);
+
+  // Disconnetti tutti gli altri utenti
+  const disconnectAllOtherUsers = useCallback(() => {
+    if (!database || !currentRoomRef.current) {
+      console.warn('[Firebase] Cannot disconnect users - not connected');
+      return;
+    }
+
+    const usersRef = ref(database, `rooms/${currentRoomRef.current}/users`);
+    onValue(usersRef, (snapshot) => {
+      const users = snapshot.val() || {};
+      
+      Object.entries(users).forEach(([key, user]: [string, any]) => {
+        // Non disconnettere se stesso
+        if (user.clientId !== clientIdRef.current) {
+          const userRef = ref(database, `rooms/${currentRoomRef.current}/users/${key}`);
+          remove(userRef);
+        }
+      });
+      
+      console.log('[Firebase] ✅ Disconnected all other users');
+    }, { onlyOnce: true });
+  }, [database]);
+
   // Lascia la stanza
   const leaveRoom = useCallback(() => {
     if (!database || !currentRoomRef.current) {
@@ -502,6 +542,8 @@ export const useCanvasSyncFirebase = (
     sendJournalState,
     sendBoardState,
     sendCanvasFullState,
+    disconnectUser,
+    disconnectAllOtherUsers,
     clientIdRef,
     currentRoomRef
   };
