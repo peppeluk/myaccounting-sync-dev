@@ -5,7 +5,17 @@
 
 import { useEffect, useRef, useState, useCallback, type RefObject } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, push, onValue, onChildAdded, serverTimestamp, set, remove } from 'firebase/database';
+import { 
+  getDatabase, 
+  ref, 
+  set, 
+  push, 
+  onValue, 
+  onChildAdded, 
+  serverTimestamp, 
+  remove,
+  update
+} from 'firebase/database';
 import * as fabric from 'fabric';
 
 // Configurazione Firebase
@@ -120,6 +130,7 @@ export const useCanvasSyncFirebase = (
   const [connectedUsers, setConnectedUsers] = useState(0);
   
   const clientIdRef = useRef<string>('');
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Inizializza clientId se non presente
   useEffect(() => {
@@ -173,12 +184,34 @@ export const useCanvasSyncFirebase = (
     const userKey = newUserRef.key;
     set(newUserRef, {
       clientId: clientIdRef.current,
-      connectedAt: serverTimestamp()
+      connectedAt: serverTimestamp(),
+      lastSeen: serverTimestamp()
     });
+
+    // Heartbeat per mantenere connessione attiva
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (currentRoomRef.current && userKey) {
+        const userRef = ref(database, `rooms/${currentRoomRef.current}/users/${userKey}`);
+        update(userRef, {
+          lastSeen: serverTimestamp()
+        });
+      }
+    }, 10000); // Heartbeat ogni 10 secondi
 
     // Ascolta utenti connessi
     const usersListener = onValue(usersRef, (snapshot) => {
       const users = snapshot.val() || {};
+      const now = Date.now();
+      
+      // Rimuovi utenti inattivi da più di 15 secondi
+      Object.entries(users).forEach(([key, user]: [string, any]) => {
+        const lastSeen = user.lastSeen || user.connectedAt;
+        if (lastSeen && (now - lastSeen) > 15000) {
+          console.log(`[Firebase] 🧹 Removing inactive user: ${key}`);
+          remove(ref(database, `rooms/${roomId}/users/${key}`));
+        }
+      });
+      
       const usersList = Object.values(users).map((user: any) => ({
         ...user,
         connectedAt: user.connectedAt || Date.now()
@@ -366,6 +399,12 @@ export const useCanvasSyncFirebase = (
     // Pulisci listeners
     clearListeners();
     
+    // Ferma heartbeat
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+    
     // Rimuovi utente dalla stanza
     const usersRef = ref(database, `rooms/${currentRoomRef.current}/users`);
     onValue(usersRef, (snapshot) => {
@@ -495,13 +534,22 @@ export const useCanvasSyncFirebase = (
           fill: obj.fill,
           stroke: obj.stroke,
           strokeWidth: obj.strokeWidth,
+          strokeLineCap: obj.strokeLineCap,
+          strokeLineJoin: obj.strokeLineJoin,
+          strokeDashArray: obj.strokeDashArray,
+          opacity: obj.opacity,
+          selectable: obj.selectable,
+          evented: obj.evented,
           ...(obj.type === 'path' && { path: obj.path }),
           ...(obj.type === 'rect' && { rx: obj.rx, ry: obj.ry }),
           ...(obj.type === 'circle' && { radius: obj.radius }),
           ...(obj.type === 'text' && { 
             text: obj.text,
             fontSize: obj.fontSize,
-            fontFamily: obj.fontFamily
+            fontFamily: obj.fontFamily,
+            textAlign: obj.textAlign,
+            originX: obj.originX,
+            originY: obj.originY
           })
         })),
         metadata: {
