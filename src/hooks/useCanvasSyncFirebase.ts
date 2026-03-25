@@ -175,7 +175,6 @@ export const useCanvasSyncFirebase = (
 
     // Riferimenti ai nodi Firebase
     const usersRef = ref(database, `rooms/${roomId}/users`);
-    const canvasEventsRef = ref(database, `rooms/${roomId}/canvas`);
     const journalDataRef = ref(database, `rooms/${roomId}/journal`);
     const boardDataRef = ref(database, `rooms/${roomId}/board`);
 
@@ -217,12 +216,17 @@ export const useCanvasSyncFirebase = (
         connectedAt: user.connectedAt || Date.now()
       }));
       setConnectedUsers(usersList.length);
+      
+      // Cleanup dati vecchi ogni 30 secondi
+      cleanupOldData(roomId);
     });
 
-    // Ascolta eventi canvas
-    const canvasListener = onChildAdded(canvasEventsRef, (snapshot) => {
+    // Ascolta stato canvas snapshot (leggero e veloce)
+    const canvasStateListener = onValue(ref(database, `rooms/${roomId}/canvasState`), (snapshot) => {
       const data = snapshot.val();
-      console.log('[Firebase] 📥 RAW canvas data received:', data);
+      if (!data) return;
+      
+      console.log('[Firebase] 📥 RAW canvas snapshot received:', data);
       console.log('[Firebase] 🔍 Canvas ref available:', !!canvasRef.current);
       console.log('[Firebase] 🔍 Client ID check:', data.clientId, 'vs', clientIdRef.current);
       console.log('[Firebase] 🔍 State data:', !!data.state);
@@ -263,7 +267,7 @@ export const useCanvasSyncFirebase = (
                   setTimeout(() => {
                     canvasRef.current.__eventListeners = originalEvents;
                     isApplyingRemoteDataRef.current = false;
-                    console.log(`[Firebase] ✅ Applied ${objects.length} objects, events restored`);
+                    console.log(`[Firebase] ✅ Applied ${objects.length} objects from snapshot, events restored`);
                   }, 100);
                 }).catch((error) => {
                   console.error('[Firebase] 💥 Error enlivening objects:', error);
@@ -285,7 +289,7 @@ export const useCanvasSyncFirebase = (
           isApplyingRemoteDataRef.current = false;
         }
       } else {
-        console.log('[Firebase] ⏭️ Skipping canvas data - conditions not met');
+        console.log('[Firebase] ⏭️ Skipping canvas snapshot - conditions not met');
       }
     });
 
@@ -324,20 +328,21 @@ export const useCanvasSyncFirebase = (
         } catch (error) {
           console.error('[Firebase] 💥 Error applying board action:', error);
         }
-      } else {
-        console.log('[Firebase] ⏭️ Skipping board data - conditions not met');
       }
     });
 
-    // Salva listeners per cleanup
-    listenersRef.current = [usersListener, canvasListener, journalListener, boardListener];
+    // Aggiungi tutti i listeners
+    listenersRef.current = [
+      usersListener,
+      canvasStateListener,
+      journalListener,
+      boardListener
+    ];
 
-    // Cleanup quando utente lascia la pagina
+    // Cleanup su unmount
     const handleUnload = () => {
-      console.log('[Firebase] User leaving page, cleaning up...');
-      if (userKey) {
-        remove(ref(database, `rooms/${roomId}/users/${userKey}`));
-      }
+      clearListeners();
+      leaveRoom();
     };
 
     window.addEventListener('beforeunload', handleUnload);
@@ -347,6 +352,50 @@ export const useCanvasSyncFirebase = (
       handleUnload();
     };
   }, [database, clearListeners]);
+
+  // Cleanup dati vecchi per risparmiare storage e download
+  const cleanupOldData = useCallback((roomId: string) => {
+    if (!database) return;
+    
+    const now = Date.now();
+    const maxAge = 5 * 60 * 1000; // 5 minuti max retention
+    
+    // Cleanup canvas history (non più usata ma per compatibilità)
+    const canvasRef = ref(database, `rooms/${roomId}/canvas`);
+    onValue(canvasRef, (snapshot) => {
+      const events = snapshot.val() || {};
+      Object.entries(events).forEach(([key, event]: [string, any]) => {
+        const timestamp = event.timestamp || 0;
+        if (now - timestamp > maxAge) {
+          console.log(`[Firebase] 🗑️ Removing old canvas event: ${key}`);
+          remove(ref(database, `rooms/${roomId}/canvas/${key}`));
+        }
+      });
+    }, { onlyOnce: true });
+    
+    // Cleanup journal events
+    const journalRef = ref(database, `rooms/${roomId}/journal`);
+    onValue(journalRef, (snapshot) => {
+      const events = snapshot.val() || {};
+      Object.entries(events).forEach(([key, event]: [string, any]) => {
+        const timestamp = event.timestamp || 0;
+        if (now - timestamp > maxAge) {
+          console.log(`[Firebase] 🗑️ Removing old journal event: ${key}`);
+          remove(ref(database, `rooms/${roomId}/journal/${key}`));
+        }
+      });
+    }, { onlyOnce: true });
+    
+    // Cleanup canvasState vecchio (se esiste)
+    const canvasStateRef = ref(database, `rooms/${roomId}/canvasState`);
+    onValue(canvasStateRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data && data.timestamp && (now - data.timestamp) > maxAge) {
+        console.log(`[Firebase] 🗑️ Removing old canvas state snapshot`);
+        remove(canvasStateRef);
+      }
+    }, { onlyOnce: true });
+  }, [database]);
 
   // Disconnetti utente specifico
   const disconnectUser = useCallback((userKey: string) => {
@@ -492,7 +541,7 @@ export const useCanvasSyncFirebase = (
     console.log('[Firebase] Sent board state:', state);
   }, [database, isConnected]);
 
-  // Invia stato completo canvas
+  // Invia stato completo canvas (snapshot invece di storia)
   const sendCanvasFullState = useCallback(() => {
     // Non inviare se stiamo applicando dati remoti per prevenire loop infinito
     if (isApplyingRemoteDataRef.current) {
@@ -511,19 +560,15 @@ export const useCanvasSyncFirebase = (
       return;
     }
 
-    const canvas = canvasRef.current;
-    if (!canvas.getObjects) {
-      console.log('[Firebase] Canvas not ready');
-      return;
-    }
-
     try {
+      const canvas = canvasRef.current;
+      
       // Estrai oggetti canvas
       const objects = canvas.getObjects().filter((obj: any) => {
         return !obj.isType('selection') && !obj.isType('background');
       });
 
-      // Crea stato canvas
+      // Sovrascrivi stato corrente invece di aggiungere alla storia
       const canvasState = {
         objects: objects.map((obj: any) => ({
           type: obj.type,
@@ -559,14 +604,15 @@ export const useCanvasSyncFirebase = (
         }
       };
 
-      const canvasEventsRef = ref(database, `rooms/${currentRoomRef.current}/canvas`);
-      push(canvasEventsRef, {
+      // Sovrascrivi invece di push per evitare accumulo
+      const canvasStateRef = ref(database, `rooms/${currentRoomRef.current}/canvasState`);
+      set(canvasStateRef, {
         clientId: clientIdRef.current,
         state: canvasState,
         timestamp: serverTimestamp()
       });
 
-      console.log('[Firebase] Sent canvas state with', objects.length, 'objects');
+      console.log('[Firebase] 📤 Sent canvas snapshot with', objects.length, 'objects');
     } catch (error) {
       console.error('[Firebase] Error sending canvas state:', error);
     }
