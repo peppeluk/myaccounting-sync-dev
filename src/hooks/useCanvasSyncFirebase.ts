@@ -293,6 +293,24 @@ export const useCanvasSyncFirebase = (
       }
     });
 
+    // Sincronizza journal esistente all'join
+    const journalRef = ref(database, `rooms/${roomId}/journal`);
+    onValue(journalRef, (snapshot) => {
+      const journal = snapshot.val() || {};
+      console.log('[Firebase] 📚 Loading existing journal entries:', Object.keys(journal).length);
+      
+      Object.values(journal).forEach((entry: any) => {
+        if (entry.clientId !== clientIdRef.current && journalSync?.onAction) {
+          console.log('[Firebase] 🎯 Applying existing journal action:', entry.action);
+          try {
+            journalSync.onAction(entry.action);
+          } catch (error) {
+            console.error('[Firebase] 💥 Error applying existing journal action:', error);
+          }
+        }
+      });
+    }, { onlyOnce: true });
+
     // Ascolta eventi journal
     const journalListener = onChildAdded(journalDataRef, (snapshot) => {
       const data = snapshot.val();
@@ -585,9 +603,21 @@ export const useCanvasSyncFirebase = (
           opacity: obj.opacity,
           selectable: obj.selectable,
           evented: obj.evented,
-          ...(obj.type === 'path' && { path: obj.path }),
+          // Correggi problemi specifici per tipo
+          ...(obj.type === 'path' && { 
+            path: obj.path,
+            // Assicura che i path abbiano le proprietà di disegno corrette
+            fill: obj.fill || 'transparent', // Path di default senza riempimento
+            stroke: obj.stroke || '#000000', // Path di default con bordo nero
+            strokeWidth: obj.strokeWidth || 2
+          }),
+          ...(obj.type === 'circle' && { 
+            radius: obj.radius,
+            // Correggi colore riempimento per cerchi
+            fill: obj.fill || 'transparent', // Cerchi di default senza riempimento
+            stroke: obj.stroke || '#000000' // Cerchi di default con bordo
+          }),
           ...(obj.type === 'rect' && { rx: obj.rx, ry: obj.ry }),
-          ...(obj.type === 'circle' && { radius: obj.radius }),
           ...(obj.type === 'text' && { 
             text: obj.text,
             fontSize: obj.fontSize,
