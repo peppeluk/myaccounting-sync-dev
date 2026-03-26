@@ -863,7 +863,6 @@ function App() {
   const {
     isConnected: syncIsConnected,
     joinRoom: syncJoinRoom,
-    leaveRoom: syncLeaveRoom,
     sendJournalAction,
     sendJournalState,
     sendBoardState,
@@ -871,6 +870,9 @@ function App() {
     disconnectUser,
     disconnectAllOtherUsers,
     clearRoom,
+    getAllRooms,
+    deleteRoom,
+    deleteAllRooms,
     currentRoom: syncCurrentRoom,
     connectedUsers: syncConnectedUsers,
     currentRoomRef: syncCurrentRoomRef
@@ -6599,10 +6601,12 @@ function App() {
           isConnected={syncIsConnected}
           currentRoom={syncCurrentRoom}
           onJoinRoom={syncJoinRoom}
-          onLeaveRoom={syncLeaveRoom}
           onDisconnectUser={disconnectUser}
           onDisconnectAll={disconnectAllOtherUsers}
           onClearRoom={clearRoom}
+          onGetAllRooms={getAllRooms}
+          onDeleteRoom={deleteRoom}
+          onDeleteAllRooms={deleteAllRooms}
           connectedUsers={syncConnectedUsers}
         />
 

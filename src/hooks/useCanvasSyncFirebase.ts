@@ -520,6 +520,90 @@ export const useCanvasSyncFirebase = (
     }
   }, [database]);
 
+  // Ottieni lista di tutte le stanze
+  const getAllRooms = useCallback(async () => {
+    if (!database) {
+      console.warn('[Firebase] Cannot get rooms - Firebase not initialized');
+      return [];
+    }
+
+    try {
+      const roomsRef = ref(database, 'rooms');
+      const snapshot = await new Promise<any>((resolve) => {
+        onValue(roomsRef, (snapshot) => {
+          resolve(snapshot);
+        }, { onlyOnce: true });
+      });
+      
+      const roomsData = snapshot.val() || {};
+      const rooms = Object.keys(roomsData).map(roomId => {
+        const room = roomsData[roomId];
+        const users = room.users || {};
+        const userCount = Object.keys(users).length;
+        
+        return {
+          id: roomId,
+          name: roomId,
+          userCount,
+          users: Object.values(users),
+          hasCanvas: !!(room.canvasState || room.canvas),
+          hasJournal: !!(room.journalState || room.journal),
+          hasBoard: !!(room.boardState || room.board),
+          lastActivity: Math.max(
+            ...Object.values(users).map((user: any) => user.lastSeen || user.connectedAt || 0),
+            room.canvasState?.timestamp || 0,
+            room.journalState?.timestamp || 0,
+            room.boardState?.timestamp || 0
+          )
+        };
+      }).sort((a, b) => b.lastActivity - a.lastActivity);
+
+      console.log(`[Firebase] 📋 Found ${rooms.length} rooms:`, rooms);
+      return rooms;
+    } catch (error) {
+      console.error('[Firebase] ❌ Error getting rooms:', error);
+      return [];
+    }
+  }, [database]);
+
+  // Elimina una stanza specifica
+  const deleteRoom = useCallback(async (roomId: string) => {
+    if (!database) {
+      console.warn('[Firebase] Cannot delete room - Firebase not initialized');
+      return false;
+    }
+
+    try {
+      console.log(`[Firebase] 🗑️ Deleting room: ${roomId}`);
+      const roomRef = ref(database, `rooms/${roomId}`);
+      await remove(roomRef);
+      console.log(`[Firebase] ✅ Room ${roomId} deleted successfully`);
+      return true;
+    } catch (error) {
+      console.error(`[Firebase] ❌ Error deleting room ${roomId}:`, error);
+      return false;
+    }
+  }, [database]);
+
+  // Elimina tutte le stanze
+  const deleteAllRooms = useCallback(async () => {
+    if (!database) {
+      console.warn('[Firebase] Cannot delete rooms - Firebase not initialized');
+      return false;
+    }
+
+    try {
+      console.log('[Firebase] 🧹 Deleting ALL rooms');
+      const roomsRef = ref(database, 'rooms');
+      await remove(roomsRef);
+      console.log('[Firebase] ✅ All rooms deleted successfully');
+      return true;
+    } catch (error) {
+      console.error('[Firebase] ❌ Error deleting all rooms:', error);
+      return false;
+    }
+  }, [database]);
+
   // Lascia la stanza
   const leaveRoom = useCallback(() => {
     if (!database || !currentRoomRef.current) {
@@ -734,6 +818,9 @@ export const useCanvasSyncFirebase = (
     disconnectUser,
     disconnectAllOtherUsers,
     clearRoom,
+    getAllRooms,
+    deleteRoom,
+    deleteAllRooms,
     clientIdRef,
     currentRoomRef
   };

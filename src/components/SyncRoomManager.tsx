@@ -1,19 +1,15 @@
-// ============================================================
-// SyncRoomManager.tsx
-// Componente UI per gestione stanze sincronizzazione
-// ============================================================
-// Path: apps/web/src/components/SyncRoomManager.tsx
-
 import { useState, useEffect } from 'react';
 
 type SyncRoomManagerProps = {
   isConnected: boolean;
   currentRoom: string | null;
   onJoinRoom: (roomId: string, nickname?: string, ipAddress?: string) => void;
-  onLeaveRoom: () => void;
   onDisconnectUser?: (userKey: string) => void;
   onDisconnectAll?: () => void;
   onClearRoom?: () => void;
+  onGetAllRooms?: () => Promise<any[]>;
+  onDeleteRoom?: (roomId: string) => Promise<boolean>;
+  onDeleteAllRooms?: () => Promise<boolean>;
   connectedUsers?: number;
 };
 
@@ -21,19 +17,20 @@ export function SyncRoomManager({
   isConnected,
   currentRoom,
   onJoinRoom,
-  onLeaveRoom,
   onDisconnectUser,
   onDisconnectAll,
   onClearRoom,
+  onGetAllRooms,
+  onDeleteRoom,
+  onDeleteAllRooms,
   connectedUsers = 0
 }: SyncRoomManagerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [roomInput, setRoomInput] = useState('');
   const [nicknameInput, setNicknameInput] = useState('');
-  const [ipAddress, setIpAddress] = useState(''); // IP rilevato automaticamente
-  const [manualIP, setManualIP] = useState(''); // IP inserito manualmente
-  const [useManualIP, setUseManualIP] = useState(false); // Flag per usare IP manuale
-  const [showQuickRooms, setShowQuickRooms] = useState(false);
+  const [allRooms, setAllRooms] = useState<any[]>([]);
+  const [showRoomManager, setShowRoomManager] = useState(false);
+  const [loadingRooms, setLoadingRooms] = useState(false);
 
   // Carica nickname salvato
   useEffect(() => {
@@ -41,384 +38,369 @@ export function SyncRoomManager({
     if (saved) setNicknameInput(saved);
   }, []);
 
-  // Ottieni IP address automaticamente
-  useEffect(() => {
-    const getLocalIP = async () => {
-      console.log('[IP Detection] Starting IP detection...');
-      
-      // Metodo 1: WebRTC (più affidabile)
-      try {
-        const pc = new RTCPeerConnection({ iceServers: [] });
-        pc.createDataChannel('');
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            const candidate = event.candidate.candidate;
-            const match = candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
-            if (match) {
-              const ip = match[1];
-              console.log('[IP Detection] WebRTC found IP:', ip);
-              setIpAddress(ip);
-              pc.close();
-            }
-          }
-        };
+  // Carica stanze quando si apre il pannello
+  const loadRooms = async () => {
+    if (!onGetAllRooms) return;
+    
+    setLoadingRooms(true);
+    try {
+      const rooms = await onGetAllRooms();
+      setAllRooms(rooms);
+    } catch (error) {
+      console.error('Error loading rooms:', error);
+    } finally {
+      setLoadingRooms(false);
+    }
+  };
 
-        // Timeout fallback
-        setTimeout(() => {
-          if (!ipAddress) {
-            console.log('[IP Detection] WebRTC timeout, trying fallback...');
-            tryFallback();
-          }
-        }, 3000);
-        
-      } catch (error) {
-        console.log('[IP Detection] WebRTC failed:', error);
-        tryFallback();
+  // Formatta data attività
+  const formatLastActivity = (timestamp: number) => {
+    const now = Date.now();
+    const diff = now - timestamp;
+    
+    if (diff < 60000) return 'ora';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} min fa`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)} ore fa`;
+    return `${Math.floor(diff / 86400000)} giorni fa`;
+  };
+
+  // Gestione eliminazione stanza
+  const handleDeleteRoom = async (roomId: string) => {
+    if (!onDeleteRoom) return;
+    
+    if (confirm(`Eliminare definitivamente la stanza "${roomId}"?\n\nQuesta azione cancellerà tutti i dati della stanza in modo permanente.`)) {
+      const success = await onDeleteRoom(roomId);
+      if (success) {
+        setAllRooms(prev => prev.filter(room => room.id !== roomId));
       }
-    };
+    }
+  };
 
-    const tryFallback = () => {
-      // Fallback 1: window.location.hostname
-      const hostname = window.location.hostname;
-      console.log('[IP Detection] Trying hostname:', hostname);
-      
-      if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
-        setIpAddress(hostname);
-        console.log('[IP Detection] Using hostname as IP:', hostname);
-        return;
+  // Gestione eliminazione tutte le stanze
+  const handleDeleteAllRooms = async () => {
+    if (!onDeleteAllRooms) return;
+    
+    if (confirm('⚠️ ELIMINARE TUTTE LE STANZE?\n\nQuesta azione cancellerà tutte le stanze e tutti i dati in modo permanente.\n\nQuesto processo è IRREVERSIBILE!')) {
+      const success = await onDeleteAllRooms();
+      if (success) {
+        setAllRooms([]);
       }
-
-      // Fallback 2: IP da richiesta esterna (se necessario)
-      fetch('https://api.ipify.org?format=json')
-        .then(res => res.json())
-        .then(data => {
-          const publicIP = data.ip;
-          console.log('[IP Detection] Public IP:', publicIP);
-          setIpAddress(publicIP);
-        })
-        .catch(() => {
-          // Fallback finale: IP locale comune
-          const commonIPs = ['192.168.1.100', '192.168.1.101', '10.0.0.100'];
-          setIpAddress(commonIPs[0]);
-          console.log('[IP Detection] Using fallback IP:', commonIPs[0]);
-        });
-    };
-
-    getLocalIP();
-  }, [ipAddress]);
-
-  // Quick rooms personalizzabili
-  const quickRooms = [
-    { id: 'aula-1a', label: 'Aula 1A', icon: '🏫' },
-    { id: 'aula-2b', label: 'Aula 2B', icon: '🏫' },
-    { id: 'aula-3c', label: 'Aula 3C', icon: '🏫' },
-    { id: 'laboratorio', label: 'Laboratorio', icon: '💻' },
-    { id: 'aula-magna', label: 'Aula Magna', icon: '🎓' }
-  ];
+    }
+  };
 
   const handleJoin = () => {
-    if (!roomInput.trim()) {
-      alert('⚠️ Inserisci il nome della stanza');
-      return;
-    }
-
-    const nickname = nicknameInput.trim();
-    if (nickname) {
-      localStorage.setItem('sync-nickname', nickname);
-    }
-    
-    onJoinRoom(roomInput.trim(), nickname || undefined);
-    setIsOpen(false);
-  };
-
-  const handleQuickJoin = (roomId: string) => {
-    const nickname = nicknameInput.trim();
-    if (nickname) {
-      localStorage.setItem('sync-nickname', nickname);
-    }
-
-    onJoinRoom(roomId, nickname || undefined);
-    setIsOpen(false);
-  };
-
-  const handleLeave = () => {
-    if (confirm('Disconnettersi dalla stanza corrente?')) {
-      onLeaveRoom();
+    if (roomInput.trim()) {
+      onJoinRoom(roomInput.trim(), nicknameInput.trim());
+      setIsOpen(false);
     }
   };
 
   return (
     <>
       {/* Bottone Sync */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className={`toolbar-button ${isConnected ? 'active' : ''}`}
-        title={isConnected ? `Connesso: ${currentRoom} (${connectedUsers} utenti)` : 'Sincronizzazione LAN'}
-        style={{ 
-          border: '2px solid red', 
-          backgroundColor: 'yellow', 
-          margin: '0 5px',
-          padding: '8px 12px',
-          borderRadius: '4px'
-        }}
-      >
-        <i className={`fa-solid fa-${isConnected ? 'wifi' : 'wifi-slash'}`} />
-        {isConnected && (
-          <>
-            <span className="sync-dot" />
-            <span style={{ fontSize: '11px', marginLeft: '4px', fontWeight: '600' }}>
-              {currentRoom}
-            </span>
-            {connectedUsers > 1 && (
-              <span style={{ fontSize: '10px', marginLeft: '4px', background: '#eff6ff', padding: '2px 6px', borderRadius: '8px', color: '#3b82f6' }}>
-                {connectedUsers}
-              </span>
-            )}
-          </>
-        )}
-      </button>
+      <div className="sync-panel">
+        {/* Pulsante sincronizzazione */}
+        <button 
+          onClick={() => setIsOpen(!isOpen)}
+          className={`sync-button ${isConnected ? 'connected' : ''}`}
+          title={isConnected ? 'Disconnetti' : 'Apri pannello sincronizzazione'}
+        >
+          <i className={`fa-solid ${isConnected ? 'fa-unlink' : 'fa-link'}`} />
+          {' '}{isConnected ? 'Disconnetti' : 'Sincronizzazione LAN'}
+        </button>
 
-      {/* Modal */}
-      {isOpen && (
-        <div className="modal-overlay" onClick={() => setIsOpen(false)}>
-          <div className="modal-content sync-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>
-                <i className="fa-solid fa-share-nodes" />
-                Sincronizzazione LAN
-              </h2>
-              <button onClick={() => setIsOpen(false)} className="icon-button">
-                <i className="fa-solid fa-xmark" />
+        {/* Pulsante gestione stanze */}
+        <button 
+          onClick={() => {
+            setShowRoomManager(!showRoomManager);
+            if (!showRoomManager) {
+              loadRooms();
+            }
+          }}
+          className="sync-button"
+          title="Gestione stanze Firebase"
+        >
+          <i className="fa-solid fa-database" />
+          {' '}Gestione Stanze
+        </button>
+
+        {/* Gestione stanze */}
+        {showRoomManager && (
+          <div className="sync-rooms-manager" style={{
+            position: 'absolute',
+            top: '100%',
+            left: '0',
+            right: '0',
+            background: 'white',
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            padding: '15px',
+            marginTop: '5px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            zIndex: 1000,
+            maxHeight: '400px',
+            overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h4 style={{ margin: 0, color: '#333' }}>
+                <i className="fa-solid fa-server" /> Stanze Firebase ({allRooms.length})
+              </h4>
+              <button 
+                onClick={() => setShowRoomManager(false)}
+                className="btn-small"
+                style={{ background: '#f0f0f0', border: 'none', padding: '5px 10px' }}
+              >
+                <i className="fa-solid fa-times" />
               </button>
             </div>
-            
-            <div className="modal-body">
-              {isConnected && currentRoom ? (
-                /* CONNESSO */
-                <div className="sync-status-connected">
-                  <div className="sync-status-header">
-                    <i className="fa-solid fa-circle-check" />
-                    <div>
-                      <strong>Connesso alla stanza</strong>
-                      <span className="sync-room-name">{currentRoom}</span>
+
+            {loadingRooms ? (
+              <div style={{ textAlign: 'center', padding: '20px' }}>
+                <i className="fa-solid fa-spinner fa-spin" /> Caricamento stanze...
+              </div>
+            ) : allRooms.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                <i className="fa-solid fa-inbox" /> Nessuna stanza trovata
+              </div>
+            ) : (
+              <>
+                {/* Pulsante elimina tutte */}
+                {allRooms.length > 0 && (
+                  <div style={{ marginBottom: '15px', textAlign: 'right' }}>
+                    <button 
+                      onClick={handleDeleteAllRooms}
+                      className="btn-small btn-danger"
+                      title="Elimina tutte le stanze"
+                    >
+                      <i className="fa-solid fa-trash-can" /> Elimina Tutte
+                    </button>
+                  </div>
+                )}
+
+                {/* Lista stanze */}
+                <div className="rooms-list">
+                  {allRooms.map((room) => (
+                    <div 
+                      key={room.id}
+                      className="room-item"
+                      style={{
+                        border: '1px solid #e0e0e0',
+                        borderRadius: '6px',
+                        padding: '12px',
+                        marginBottom: '10px',
+                        background: room.id === currentRoom ? '#f8f9fa' : 'white'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 'bold', color: '#333', marginBottom: '5px' }}>
+                            <i className="fa-solid fa-door-open" /> {room.name}
+                            {room.id === currentRoom && (
+                              <span style={{
+                                background: '#007bff',
+                                color: 'white',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontSize: '11px',
+                                marginLeft: '8px'
+                              }}>
+                                Corrente
+                              </span>
+                            )}
+                          </div>
+                          
+                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                            <div>
+                              <i className="fa-solid fa-users" /> {room.userCount} utente{room.userCount !== 1 ? 'i' : ''}
+                            </div>
+                            <div>
+                              <i className="fa-solid fa-clock" /> {formatLastActivity(room.lastActivity)}
+                            </div>
+                          </div>
+
+                          <div style={{ fontSize: '11px', color: '#888' }}>
+                            <span style={{ marginRight: '15px' }}>
+                              <i className={`fa-solid ${room.hasCanvas ? 'fa-paint-brush' : 'fa-paint-brush'}`} 
+                                style={{ color: room.hasCanvas ? '#28a745' : '#ccc' }} /> Canvas
+                            </span>
+                            <span style={{ marginRight: '15px' }}>
+                              <i className={`fa-solid ${room.hasJournal ? 'fa-book' : 'fa-book'}`} 
+                                style={{ color: room.hasJournal ? '#28a745' : '#ccc' }} /> Journal
+                            </span>
+                            <span>
+                              <i className={`fa-solid ${room.hasBoard ? 'fa-chalkboard' : 'fa-chalkboard'}`} 
+                                style={{ color: room.hasBoard ? '#28a745' : '#ccc' }} /> Board
+                            </span>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                          <button 
+                            onClick={() => onJoinRoom(room.id)}
+                            disabled={room.id === currentRoom}
+                            className="btn-small"
+                            style={{ 
+                              fontSize: '10px', 
+                              padding: '4px 8px',
+                              opacity: room.id === currentRoom ? 0.5 : 1
+                            }}
+                            title={room.id === currentRoom ? 'Sei già in questa stanza' : 'Entra nella stanza'}
+                          >
+                            <i className="fa-solid fa-sign-in-alt" />
+                          </button>
+                          
+                          {room.id !== currentRoom && (
+                            <button 
+                              onClick={() => handleDeleteRoom(room.id)}
+                              className="btn-small btn-danger"
+                              style={{ fontSize: '10px', padding: '4px 8px' }}
+                              title="Elimina stanza"
+                            >
+                              <i className="fa-solid fa-trash" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Pannello sincronizzazione */}
+        {isOpen && (
+          <div className="modal-overlay" onClick={() => setIsOpen(false)}>
+            <div className="modal-content sync-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>
+                  <i className="fa-solid fa-share-nodes" />
+                  Sincronizzazione LAN
+                </h2>
+                <button onClick={() => setIsOpen(false)} className="icon-button">
+                  <i className="fa-solid fa-xmark" />
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <div className="form-group">
+                  <label>
+                    <i className="fa-solid fa-door-open" />
+                    Nome stanza
+                  </label>
+                  <input
+                    type="text"
+                    value={roomInput}
+                    onChange={(e) => setRoomInput(e.target.value)}
+                    placeholder="Es: aula-1a, aula-3c"
+                    className="form-input"
+                  />
+                  <small className="form-hint">
+                    Scegli un nome univoco per la tua stanza di lavoro
+                  </small>
+                </div>
+
+                <div className="form-group">
+                  <label>
+                    <i className="fa-solid fa-user" />
+                    Nome dispositivo (opzionale)
+                  </label>
+                  <input
+                    type="text"
+                    value={nicknameInput}
+                    onChange={(e) => {
+                      setNicknameInput(e.target.value);
+                      localStorage.setItem('sync-nickname', e.target.value);
+                    }}
+                    placeholder="Il tuo nome"
+                    className="form-input"
+                  />
+                  <small className="form-hint">
+                    Tutti i dispositivi nella stessa stanza si sincronizzano
+                  </small>
+                </div>
+
+                <button onClick={handleJoin} className="btn-primary btn-block">
+                  <i className="fa-solid fa-right-to-bracket" />
+                  Entra nella stanza
+                </button>
+
+                {isConnected && (
+                  <div className="sync-status">
+                    <div className="sync-indicator">
+                      <div className="sync-dot active"></div>
+                      <span>Connesso a: {currentRoom}</span>
+                    </div>
+                    <div className="sync-users">
+                      <i className="fa-solid fa-users" />
+                      Dispositivi connessi: {connectedUsers}
                     </div>
                   </div>
+                )}
 
-                  {(useManualIP ? manualIP : ipAddress) && (
-                    <div className="sync-status-metric">
-                      <i className="fa-solid fa-network-wired" />
-                      <span>IP Locale: <strong>{useManualIP ? manualIP : ipAddress}</strong></span>
-                      {useManualIP && (
-                        <small style={{ marginLeft: '8px', color: '#f59e0b' }}>
-                          (Manuale)
-                        </small>
-                      )}
-                    </div>
-                  )}
-
-                  {connectedUsers > 0 && (
-                    <div className="sync-connected-users">
-                      <h4>
-                        <i className="fa-solid fa-users" />
-                        Dispositivi connessi ({connectedUsers})
-                        {connectedUsers > 1 && onDisconnectAll && (
-                          <button 
-                            onClick={() => {
-                              if (confirm('Disconnettere tutti gli altri utenti?')) {
-                                onDisconnectAll();
-                              }
-                            }}
-                            className="btn-small btn-danger"
-                            style={{ marginLeft: '10px', fontSize: '11px' }}
-                            title="Disconnetti tutti gli altri utenti"
-                          >
-                            <i className="fa-solid fa-user-slash" />
-                          </button>
-                        )}
-                        {onClearRoom && (
-                          <button 
-                            onClick={() => {
-                              if (confirm('⚠️ SVUOTARE COMPLETAMENTE LA STANZA?\n\nQuesta azione cancellerà:\n• Tutti gli utenti connessi\n• Tutti i disegni salvati\n• Tutte le note del journal\n• Tutti i dati della board\n\nQuesto processo è IRREVERSIBILE!')) {
-                                onClearRoom();
-                              }
-                            }}
-                            className="btn-small btn-warning"
-                            style={{ marginLeft: '10px', fontSize: '11px' }}
-                            title="Svuota completamente la stanza"
-                          >
-                            <i className="fa-solid fa-trash-can" />
-                          </button>
-                        )}
-                      </h4>
-                      <ul>
-                        {Array.from({ length: connectedUsers }, (_, i) => (
-                          <li key={i}>
-                            Utente {i + 1}
-                            {i > 0 && onDisconnectUser && (
-                              <button 
-                                onClick={() => {
-                                  if (confirm(`Disconnettere Utente ${i + 1}?`)) {
-                                    // Nota: userKey qui è simulato, in realtà serve il vero key di Firebase
-                                    onDisconnectUser(`user-${i}`);
-                                  }
-                                }}
-                                className="btn-small btn-danger"
-                                style={{ marginLeft: '10px', fontSize: '10px' }}
-                                title={`Disconnetti Utente ${i + 1}`}
-                              >
-                                <i className="fa-solid fa-times" />
-                              </button>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  <button onClick={handleLeave} className="btn-danger btn-block">
-                    <i className="fa-solid fa-door-open" />
-                    Disconnetti
-                  </button>
-                </div>
-              ) : (
-                /* NON CONNESSO */
-                <>
-                  <div className="sync-join-form">
-                    <div className="form-group">
-                      <label>
-                        <i className="fa-solid fa-network-wired" />
-                        Il tuo IP Address
-                      </label>
-                      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                        <input
-                          type="text"
-                          value={useManualIP ? manualIP : (ipAddress || 'Rilevamento...')}
-                          onChange={(e) => {
-                            if (useManualIP) {
-                              setManualIP(e.target.value);
+                {connectedUsers > 0 && (
+                  <div className="sync-connected-users">
+                    <h4>
+                      <i className="fa-solid fa-users" />
+                      Dispositivi connessi ({connectedUsers})
+                      {connectedUsers > 1 && onDisconnectAll && (
+                        <button 
+                          onClick={() => {
+                            if (confirm('Disconnettere tutti gli altri utenti?')) {
+                              onDisconnectAll();
                             }
                           }}
-                          placeholder="Es: 192.168.1.100"
-                          style={{ 
-                            flex: 1,
-                            backgroundColor: useManualIP ? 'white' : '#f8fafc', 
-                            borderColor: '#e2e8f0',
-                            cursor: useManualIP ? 'text' : 'not-allowed'
-                          }}
-                          readOnly={!useManualIP}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setUseManualIP(!useManualIP)}
-                          className="btn-secondary"
-                          style={{ 
-                            padding: '8px 12px',
-                            fontSize: '12px',
-                            minWidth: '80px'
-                          }}
+                          className="btn-small btn-danger"
+                          style={{ marginLeft: '10px', fontSize: '11px' }}
+                          title="Disconnetti tutti gli altri utenti"
                         >
-                          {useManualIP ? 'Auto' : 'Manuale'}
+                          <i className="fa-solid fa-user-slash" />
                         </button>
-                      </div>
-                      <small className="form-hint">
-                        {useManualIP 
-                          ? "Inserisci manualmente l'IP del tuo dispositivo"
-                          : "IP rilevato automaticamente. Clicca 'Manuale' per inserirlo manualmente"
-                        }
-                      </small>
-                    </div>
-
-                    <div className="form-group">
-                      <label>
-                        <i className="fa-solid fa-user" />
-                        Nome dispositivo (opzionale)
-                      </label>
-                      <input
-                        type="text"
-                        value={nicknameInput}
-                        onChange={(e) => setNicknameInput(e.target.value)}
-                        placeholder="Es: Prof. Rossi, LIM Aula 3"
-                        autoFocus
-                      />
-                      <small className="form-hint">
-                        Aiuta gli altri a identificare questo dispositivo
-                      </small>
-                    </div>
-
-                    <div className="form-group">
-                      <label>
-                        <i className="fa-solid fa-door-open" />
-                        Nome Stanza
-                      </label>
-                      <input
-                        type="text"
-                        value={roomInput}
-                        onChange={(e) => setRoomInput(e.target.value)}
-                        placeholder="Es: aula-1a, laboratorio, studio-gruppo"
-                        onKeyPress={(e) => e.key === 'Enter' && handleJoin()}
-                      />
-                      <small className="form-hint">
-                        Tutti i dispositivi nella stessa stanza si sincronizzano
-                      </small>
-                    </div>
-
-                    <button onClick={handleJoin} className="btn-primary btn-block">
-                      <i className="fa-solid fa-right-to-bracket" />
-                      Entra nella stanza
-                    </button>
+                      )}
+                      {onClearRoom && (
+                        <button 
+                          onClick={() => {
+                            if (confirm('⚠️ SVUOTARE COMPLETAMENTE LA STANZA?\n\nQuesta azione cancellerà:\n• Tutti gli utenti connessi\n• Tutti i disegni salvati\n• Tutte le note del journal\n• Tutti i dati della board\n\nQuesto processo è IRREVERSIBILE!')) {
+                              onClearRoom();
+                            }
+                          }}
+                          className="btn-small btn-warning"
+                          style={{ marginLeft: '10px', fontSize: '11px' }}
+                          title="Svuota completamente la stanza"
+                        >
+                          <i className="fa-solid fa-trash-can" />
+                        </button>
+                      )}
+                    </h4>
+                    <ul>
+                      {Array.from({ length: connectedUsers }, (_, i) => (
+                        <li key={i}>
+                          Utente {i + 1}
+                          {i > 0 && onDisconnectUser && (
+                            <button 
+                              onClick={() => {
+                                if (confirm(`Disconnettere Utente ${i + 1}?`)) {
+                                  onDisconnectUser(`user-${i}`);
+                                }
+                              }}
+                              className="btn-small btn-danger"
+                              style={{ marginLeft: '10px', fontSize: '10px' }}
+                              title={`Disconnetti Utente ${i + 1}`}
+                            >
+                              <i className="fa-solid fa-times" />
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-
-                  <div className="sync-divider">
-                    <span>oppure</span>
-                  </div>
-
-                  <div className="sync-quick-rooms">
-                    <button
-                      onClick={() => setShowQuickRooms(!showQuickRooms)}
-                      className="btn-secondary btn-block"
-                    >
-                      <i className="fa-solid fa-bolt" />
-                      Stanze Rapide
-                      <i className={`fa-solid fa-chevron-${showQuickRooms ? 'up' : 'down'}`} style={{ marginLeft: 'auto' }} />
-                    </button>
-
-                    {showQuickRooms && (
-                      <div className="sync-quick-rooms-grid">
-                        {quickRooms.map((room) => (
-                          <button
-                            key={room.id}
-                            onClick={() => handleQuickJoin(room.id)}
-                            className="sync-quick-room-btn"
-                          >
-                            <span className="sync-room-icon">{room.icon}</span>
-                            <span className="sync-room-label">{room.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="sync-info-box">
-                    <i className="fa-solid fa-lightbulb" />
-                    <div>
-                      <strong>Come funziona:</strong>
-                      <ul>
-                        <li>Scegli un nome stanza (es: "aula-1a")</li>
-                        <li>Altri dispositivi usano lo stesso nome</li>
-                        <li>Tutto si sincronizza istantaneamente</li>
-                        <li>Per cambiare aula: disconnetti ed entra in nuova stanza</li>
-                      </ul>
-                    </div>
-                  </div>
-                </>
-              )}
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </>
   );
 }
