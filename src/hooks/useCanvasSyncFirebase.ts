@@ -461,6 +461,65 @@ export const useCanvasSyncFirebase = (
     }, { onlyOnce: true });
   }, [database]);
 
+  // Svuota completamente la stanza
+  const clearRoom = useCallback(() => {
+    if (!database || !currentRoomRef.current) {
+      console.warn('[Firebase] Cannot clear room - not connected');
+      return;
+    }
+
+    const roomId = currentRoomRef.current;
+    console.log(`[Firebase] 🧹 Clearing room: ${roomId}`);
+    
+    try {
+      // Rimuovi tutti gli utenti
+      const usersRef = ref(database, `rooms/${roomId}/users`);
+      remove(usersRef).then(() => {
+        console.log('[Firebase] ✅ Cleared all users');
+      });
+
+      // Rimuovi canvas state
+      const canvasStateRef = ref(database, `rooms/${roomId}/canvasState`);
+      remove(canvasStateRef).then(() => {
+        console.log('[Firebase] ✅ Cleared canvas state');
+      });
+
+      // Rimuovi canvas history
+      const canvasRef = ref(database, `rooms/${roomId}/canvas`);
+      remove(canvasRef).then(() => {
+        console.log('[Firebase] ✅ Cleared canvas history');
+      });
+
+      // Rimuovi journal
+      const journalRef = ref(database, `rooms/${roomId}/journal`);
+      remove(journalRef).then(() => {
+        console.log('[Firebase] ✅ Cleared journal');
+      });
+
+      // Rimuovi journal state
+      const journalStateRef = ref(database, `rooms/${roomId}/journalState`);
+      remove(journalStateRef).then(() => {
+        console.log('[Firebase] ✅ Cleared journal state');
+      });
+
+      // Rimuovi board
+      const boardRef = ref(database, `rooms/${roomId}/board`);
+      remove(boardRef).then(() => {
+        console.log('[Firebase] ✅ Cleared board');
+      });
+
+      // Rimuovi board state
+      const boardStateRef = ref(database, `rooms/${roomId}/boardState`);
+      remove(boardStateRef).then(() => {
+        console.log('[Firebase] ✅ Cleared board state');
+      });
+
+      console.log(`[Firebase] 🧹 Room ${roomId} cleared successfully`);
+    } catch (error) {
+      console.error('[Firebase] ❌ Error clearing room:', error);
+    }
+  }, [database]);
+
   // Lascia la stanza
   const leaveRoom = useCallback(() => {
     if (!database || !currentRoomRef.current) {
@@ -674,6 +733,7 @@ export const useCanvasSyncFirebase = (
     sendCanvasFullState,
     disconnectUser,
     disconnectAllOtherUsers,
+    clearRoom,
     clientIdRef,
     currentRoomRef
   };

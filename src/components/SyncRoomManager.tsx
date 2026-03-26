@@ -13,6 +13,7 @@ type SyncRoomManagerProps = {
   onLeaveRoom: () => void;
   onDisconnectUser?: (userKey: string) => void;
   onDisconnectAll?: () => void;
+  onClearRoom?: () => void;
   connectedUsers?: number;
 };
 
@@ -23,6 +24,7 @@ export function SyncRoomManager({
   onLeaveRoom,
   onDisconnectUser,
   onDisconnectAll,
+  onClearRoom,
   connectedUsers = 0
 }: SyncRoomManagerProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -234,6 +236,20 @@ export function SyncRoomManager({
                             title="Disconnetti tutti gli altri utenti"
                           >
                             <i className="fa-solid fa-user-slash" />
+                          </button>
+                        )}
+                        {onClearRoom && (
+                          <button 
+                            onClick={() => {
+                              if (confirm('⚠️ SVUOTARE COMPLETAMENTE LA STANZA?\n\nQuesta azione cancellerà:\n• Tutti gli utenti connessi\n• Tutti i disegni salvati\n• Tutte le note del journal\n• Tutti i dati della board\n\nQuesto processo è IRREVERSIBILE!')) {
+                                onClearRoom();
+                              }
+                            }}
+                            className="btn-small btn-warning"
+                            style={{ marginLeft: '10px', fontSize: '11px' }}
+                            title="Svuota completamente la stanza"
+                          >
+                            <i className="fa-solid fa-trash-can" />
                           </button>
                         )}
                       </h4>

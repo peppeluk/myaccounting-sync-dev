@@ -870,6 +870,7 @@ function App() {
     sendCanvasFullState,
     disconnectUser,
     disconnectAllOtherUsers,
+    clearRoom,
     currentRoom: syncCurrentRoom,
     connectedUsers: syncConnectedUsers,
     currentRoomRef: syncCurrentRoomRef
@@ -6601,6 +6602,7 @@ function App() {
           onLeaveRoom={syncLeaveRoom}
           onDisconnectUser={disconnectUser}
           onDisconnectAll={disconnectAllOtherUsers}
+          onClearRoom={clearRoom}
           connectedUsers={syncConnectedUsers}
         />
 
