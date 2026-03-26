@@ -26,24 +26,29 @@ const firebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// Inizializza Firebase
-let app: any = null;
+// Variabile per database Firebase (inizializzata su richiesta)
 let database: any = null;
+let app: any = null;
 
-try {
-  if (firebaseConfig.apiKey) {
-    app = initializeApp(firebaseConfig);
-    database = getDatabase(app);
-    console.log('[Firebase] App initialized successfully');
-  } else {
-    console.warn('[Firebase] Missing configuration');
+// Inizializza Firebase solo quando necessario
+const initializeFirebase = () => {
+  if (!database && firebaseConfig.apiKey) {
+    try {
+      app = initializeApp(firebaseConfig);
+      database = getDatabase(app);
+      console.log('[Firebase] App initialized successfully');
+      return true;
+    } catch (error) {
+      console.error('[Firebase] Initialization error:', error);
+      return false;
+    }
   }
-} catch (error) {
-  console.error('[Firebase] Initialization error:', error);
-}
+  return !!database;
+};
 
 export type ConnectedUser = {
   clientId: string;
@@ -158,8 +163,9 @@ export const useCanvasSyncFirebase = (
 
   // Unisciti alla stanza
   const joinRoom = useCallback((roomId: string) => {
-    if (!database) {
-      console.warn('[Firebase] Cannot join room - Firebase not initialized');
+    // Inizializza Firebase solo quando necessario
+    if (!initializeFirebase()) {
+      console.warn('[Firebase] Cannot join room - Firebase initialization failed');
       return;
     }
 
