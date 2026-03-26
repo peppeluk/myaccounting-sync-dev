@@ -522,8 +522,9 @@ export const useCanvasSyncFirebase = (
 
   // Ottieni lista di tutte le stanze
   const getAllRooms = useCallback(async () => {
-    if (!database) {
-      console.warn('[Firebase] Cannot get rooms - Firebase not initialized');
+    // Inizializza Firebase se necessario
+    if (!database && !initializeFirebase()) {
+      console.warn('[Firebase] Cannot get rooms - Firebase initialization failed');
       return [];
     }
 
@@ -568,8 +569,9 @@ export const useCanvasSyncFirebase = (
 
   // Elimina una stanza specifica
   const deleteRoom = useCallback(async (roomId: string) => {
-    if (!database) {
-      console.warn('[Firebase] Cannot delete room - Firebase not initialized');
+    // Inizializza Firebase se necessario
+    if (!database && !initializeFirebase()) {
+      console.warn('[Firebase] Cannot delete room - Firebase initialization failed');
       return false;
     }
 
@@ -587,8 +589,9 @@ export const useCanvasSyncFirebase = (
 
   // Elimina tutte le stanze
   const deleteAllRooms = useCallback(async () => {
-    if (!database) {
-      console.warn('[Firebase] Cannot delete rooms - Firebase not initialized');
+    // Inizializza Firebase se necessario
+    if (!database && !initializeFirebase()) {
+      console.warn('[Firebase] Cannot delete rooms - Firebase initialization failed');
       return false;
     }
 
