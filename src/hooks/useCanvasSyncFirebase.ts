@@ -256,8 +256,66 @@ export const useCanvasSyncFirebase = (
                 // Pulisci canvas in modo efficiente
                 canvasRef.current.clear();
                 
-                // Ricostruisci oggetti in batch
-                fabric.util.enlivenObjects(data.state.objects).then((objects) => {
+                // Ricostruisci oggetti con logica personalizzata per le immagini
+                const reconstructObjects = async (objectsData: any[]) => {
+                  const reconstructed: any[] = [];
+                  
+                  for (const objData of objectsData) {
+                    try {
+                      let obj: any = null;
+                      
+                      switch (objData.type) {
+                        case 'image':
+                          // Ricostruisci immagine con src
+                          if (objData.src) {
+                            obj = await new Promise((resolve, reject) => {
+                              const img = new Image();
+                              img.crossOrigin = objData.crossOrigin || 'anonymous';
+                              img.onload = () => {
+                                try {
+                                  const fabricImg = new fabric.Image(img, {
+                                    left: objData.left,
+                                    top: objData.top,
+                                    width: objData.width,
+                                    height: objData.height,
+                                    selectable: objData.selectable,
+                                    evented: objData.evented,
+                                    opacity: objData.opacity
+                                  });
+                                  
+                                  // Ripristina dimensioni originali se presenti
+                                  (fabricImg as any).originalWidth = objData.originalWidth;
+                                  (fabricImg as any).originalHeight = objData.originalHeight;
+                                  
+                                  resolve(fabricImg);
+                                } catch (e) {
+                                  reject(e);
+                                }
+                              };
+                              img.onerror = reject;
+                              img.src = objData.src;
+                            });
+                          }
+                          break;
+                          
+                        default:
+                          // Per tutti gli altri tipi, usa il metodo standard di Fabric
+                          obj = objData;
+                          break;
+                      }
+                      
+                      if (obj) {
+                        reconstructed.push(obj);
+                      }
+                    } catch (error) {
+                      console.error('[Firebase] Error reconstructing object:', objData, error);
+                    }
+                  }
+                  
+                  return reconstructed;
+                };
+                
+                reconstructObjects(data.state.objects).then((objects) => {
                   // Batch aggiunta oggetti per migliorare performance
                   canvasRef.current.renderOnAddRemove = false;
                   
@@ -278,9 +336,22 @@ export const useCanvasSyncFirebase = (
                     console.log(`[Firebase] ✅ Applied ${objects.length} objects from snapshot, events restored`);
                   }, 100);
                 }).catch((error) => {
-                  console.error('[Firebase] 💥 Error enlivening objects:', error);
-                  canvasRef.current.__eventListeners = originalEvents;
-                  isApplyingRemoteDataRef.current = false;
+                  console.error('[Firebase] 💥 Error reconstructing objects:', error);
+                  // Fallback al metodo standard se la ricostruzione personalizzata fallisce
+                  fabric.util.enlivenObjects(data.state.objects).then((objects) => {
+                    canvasRef.current.renderOnAddRemove = false;
+                    objects.forEach((obj: any) => {
+                      if (obj) {
+                        canvasRef.current.add(obj);
+                      }
+                    });
+                    canvasRef.current.renderOnAddRemove = true;
+                    canvasRef.current.renderAll();
+                    setTimeout(() => {
+                      canvasRef.current.__eventListeners = originalEvents;
+                      isApplyingRemoteDataRef.current = false;
+                    }, 100);
+                  });
                 });
               } catch (error) {
                 console.error('[Firebase] 💥 Error in canvas update:', error);
@@ -801,7 +872,8 @@ export const useCanvasSyncFirebase = (
       
       // Estrai oggetti canvas
       const objects = canvas.getObjects().filter((obj: any) => {
-        return !obj.isType('selection') && !obj.isType('background');
+        // Escludi solo la selezione temporanea, includi tutto il resto
+        return !obj.isType('selection');
       });
 
       // Sovrascrivi stato corrente invece di aggiungere alla storia
@@ -843,6 +915,25 @@ export const useCanvasSyncFirebase = (
             textAlign: obj.textAlign,
             originX: obj.originX,
             originY: obj.originY
+          }),
+          ...(obj.type === 'image' && { 
+            src: obj.src,
+            crossOrigin: obj.crossOrigin,
+            // Salva le dimensioni originali per il resize
+            originalWidth: obj.originalWidth || obj.width,
+            originalHeight: obj.originalHeight || obj.height,
+            // Salva anche il crop se presente
+            cropX: obj.cropX,
+            cropY: obj.cropY,
+            // Proprietà di filtro e trasformazione
+            filters: obj.filters?.map((f: any) => ({
+              type: f.type,
+              // Salva i parametri del filtro in base al tipo
+              ...(f.type === 'Grayscale' && {}),
+              ...(f.type === 'Sepia' && {}),
+              ...(f.type === 'Brightness' && { brightness: f.brightness }),
+              ...(f.type === 'Contrast' && { contrast: f.contrast })
+            })) || []
           })
         })),
         metadata: {

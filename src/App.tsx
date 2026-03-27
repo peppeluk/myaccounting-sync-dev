@@ -5175,6 +5175,7 @@ function App() {
           return;
         }
         pushHistoryState(pageId);
+        scheduleCanvasFullSync(); // Sincronizza canvas quando si modifica un oggetto
       };
       const onObjectRemoved = () => {
         const pageId = slotPageMapRef.current.get(slotId);
@@ -5182,17 +5183,28 @@ function App() {
           return;
         }
         pushHistoryState(pageId);
+        scheduleCanvasFullSync(); // Sincronizza canvas quando si rimuove un oggetto
+      };
+      const onObjectAdded = () => {
+        const pageId = slotPageMapRef.current.get(slotId);
+        if (!pageId) {
+          return;
+        }
+        pushHistoryState(pageId);
+        scheduleCanvasFullSync(); // Sincronizza canvas quando si aggiunge un oggetto (sfondo, immagini, etc.)
       };
 
       canvas.on("path:created", onPathCreated);
       canvas.on("object:modified", onObjectModified);
       canvas.on("object:removed", onObjectRemoved);
+      canvas.on("object:added", onObjectAdded);
 
       const canvasWithCleanup = canvas as unknown as { __cleanup?: () => void };
       canvasWithCleanup.__cleanup = () => {
         canvas.off("path:created", onPathCreated);
         canvas.off("object:modified", onObjectModified);
         canvas.off("object:removed", onObjectRemoved);
+        canvas.off("object:added", onObjectAdded);
       };
       const assignedPageId = slotPageMapRef.current.get(slotId);
       if (assignedPageId) {
@@ -5218,7 +5230,7 @@ function App() {
       resizeCanvases();
       setIsCanvasReady(true);
     },
-    [configureActiveTool, getCurrentPageId, handlePathCreated, loadCanvasDataIntoCanvas, pushHistoryState, resetHistoryForPage, resizeCanvases]
+    [configureActiveTool, getCurrentPageId, handlePathCreated, loadCanvasDataIntoCanvas, pushHistoryState, resetHistoryForPage, resizeCanvases, scheduleCanvasFullSync]
   );
 
   const disposeFabricCanvasForSlot = useCallback((slotId: number) => {
