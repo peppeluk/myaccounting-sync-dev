@@ -263,15 +263,36 @@ export const useCanvasSyncFirebase = (
                 canvasRef.current.clear();
                 
                 // Ricostruisci oggetti con logica migliorata
-                const reconstructObjects = async (objectsData: any[]) => {
+                const reconstructObjects = async (objectsData: any[]): Promise<any[]> => {
+                  console.log('[Firebase] 🔧 RECONSTRUCT OBJECTS CALLED with', objectsData.length, 'objects');
+                  console.log('[Firebase] 🔍 Objects types:', objectsData.map(obj => obj.type));
+                  
+                  // Timeout per evitare loop infiniti
+                  const timeoutPromise = new Promise<any[]>((_, reject) => {
+                    setTimeout(() => reject(new Error('RECONSTRUCT TIMEOUT')), 10000);
+                  });
+                  
+                  try {
+                    const result = await Promise.race([reconstructInternal(objectsData), timeoutPromise]);
+                    return result;
+                  } catch (error) {
+                    console.error('[Firebase] 💥 RECONSTRUCT TIMEOUT OR ERROR:', error);
+                    throw error;
+                  }
+                };
+                
+                const reconstructInternal = async (objectsData: any[]) => {
+                  console.log('[Firebase] 🔧 RECONSTRUCT INTERNAL STARTED');
                   // Separa immagini da altri oggetti
                   const imageObjects = objectsData.filter(obj => obj.type === 'image');
                   const otherObjects = objectsData.filter(obj => obj.type !== 'image');
                   
+                  console.log('[Firebase] 🔍 Images:', imageObjects.length, 'Others:', otherObjects.length);
                   const reconstructed: any[] = [];
                   
                   // Ricostruisci immagini separatamente
                   for (const objData of imageObjects) {
+                    console.log('[Firebase] 🔧 Processing image:', objData.src ? 'has src' : 'no src');
                     try {
                       if (objData.src) {
                         const img = await new Promise((resolve, reject) => {
@@ -326,9 +347,9 @@ export const useCanvasSyncFirebase = (
                   return reconstructed;
                 };
                 
-                reconstructObjects(data.state.objects).then((objects) => {
+                reconstructObjects(data.state.objects).then((objects: any[]) => {
                   console.log('[Firebase] 🎯 Reconstructed', objects.length, 'objects, applying to canvas');
-                  console.log('[Firebase] 🔍 Objects to apply:', objects.map((obj, i) => ({ i, type: obj?.type, valid: !!obj })));
+                  console.log('[Firebase] 🔍 Objects to apply:', objects.map((obj: any, i: number) => ({ i, type: obj?.type, valid: !!obj })));
                   
                   // Batch aggiunta oggetti per migliorare performance
                   canvasRef.current.renderOnAddRemove = false;
