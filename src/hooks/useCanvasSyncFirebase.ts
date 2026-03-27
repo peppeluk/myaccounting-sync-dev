@@ -243,6 +243,18 @@ export const useCanvasSyncFirebase = (
       console.log('[Firebase] 🔍 State objects:', data.state?.objects?.length || 0);
       console.log('[Firebase] 🔍 Fabric available:', !!fabric);
       
+      // Log completo per debug
+      console.log('[Firebase] 🔍 COMPLETE CANVAS STATE ANALYSIS:');
+      console.log('  - data.clientId:', data.clientId);
+      console.log('  - clientIdRef.current:', clientIdRef.current);
+      console.log('  - data.clientId type:', typeof data.clientId);
+      console.log('  - clientIdRef.current type:', typeof clientIdRef.current);
+      console.log('  - data.clientId === clientIdRef.current:', data.clientId === clientIdRef.current);
+      console.log('  - data.clientId !== clientIdRef.current:', data.clientId !== clientIdRef.current);
+      console.log('  - canvasRef.current:', !!canvasRef.current);
+      console.log('  - data.state:', !!data.state);
+      console.log('  - data.state.objects:', data.state?.objects?.length || 0);
+      
       if (data.clientId !== clientIdRef.current && canvasRef.current && data.state) {
         console.log('[Firebase] 🎯 Conditions met - applying remote canvas state');
         // Imposta flag per prevenire loop infinito
