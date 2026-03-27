@@ -328,18 +328,32 @@ export const useCanvasSyncFirebase = (
                 
                 reconstructObjects(data.state.objects).then((objects) => {
                   console.log('[Firebase] 🎯 Reconstructed', objects.length, 'objects, applying to canvas');
+                  console.log('[Firebase] 🔍 Objects to apply:', objects.map((obj, i) => ({ i, type: obj?.type, valid: !!obj })));
+                  
                   // Batch aggiunta oggetti per migliorare performance
                   canvasRef.current.renderOnAddRemove = false;
                   
-                  objects.forEach((obj: any) => {
+                  console.log('[Firebase] 🔄 Starting object application loop...');
+                  objects.forEach((obj: any, index: number) => {
+                    console.log(`[Firebase] 🔄 Applying object ${index}:`, obj?.type, obj);
                     if (obj) {
-                      canvasRef.current.add(obj);
+                      try {
+                        canvasRef.current.add(obj);
+                        console.log(`[Firebase] ✅ Object ${index} added successfully`);
+                      } catch (error) {
+                        console.error(`[Firebase] 💥 Error adding object ${index}:`, error);
+                      }
+                    } else {
+                      console.warn(`[Firebase] ⚠️ Object ${index} is null/undefined`);
                     }
                   });
+                  console.log('[Firebase] 🔄 Object application loop completed');
                   
                   // Riabilita rendering e forza un solo render
+                  console.log('[Firebase] 🔄 Re-enabling rendering and calling renderAll...');
                   canvasRef.current.renderOnAddRemove = true;
                   canvasRef.current.renderAll();
+                  console.log('[Firebase] ✅ renderAll() completed');
                   
                   // Ripristina eventi dopo un ritardo per permettere completamento
                   setTimeout(() => {
