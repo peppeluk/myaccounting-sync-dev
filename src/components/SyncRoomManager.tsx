@@ -150,10 +150,51 @@ export function SyncRoomManager({
         <button 
           onClick={() => setIsOpen(!isOpen)}
           className={`sync-button ${isConnected ? 'connected' : ''}`}
-          title={isConnected ? 'Disconnetti' : 'Apri pannello sincronizzazione'}
+          title={isConnected ? `Disconnetti dalla stanza "${currentRoom}"` : 'Apri pannello sincronizzazione'}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: isConnected ? '8px 12px' : '10px 16px',
+            fontSize: isConnected ? '12px' : '14px',
+            minWidth: isConnected ? 'auto' : '200px',
+            justifyContent: 'flex-start'
+          }}
         >
           <i className={`fa-solid ${isConnected ? 'fa-unlink' : 'fa-link'}`} />
-          {' '}{isConnected ? 'Disconnetti' : 'Sincronizzazione LAN'}
+          {isConnected ? (
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'flex-start',
+              gap: '2px'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '4px',
+                fontWeight: 'bold',
+                color: '#28a745',
+                fontSize: '11px'
+              }}>
+                <i className="fa-solid fa-users" style={{ fontSize: '10px' }} />
+                {connectedUsers}
+              </div>
+              <div style={{ 
+                color: '#007bff', 
+                fontSize: '10px',
+                fontWeight: '500',
+                maxWidth: '100px',
+                overflow: 'hidden', 
+                textOverflow: 'ellipsis', 
+                whiteSpace: 'nowrap' 
+              }}>
+                {currentRoom}
+              </div>
+            </div>
+          ) : (
+            'Sincronizzazione LAN'
+          )}
         </button>
 
         {/* Pannello sincronizzazione */}
