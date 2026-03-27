@@ -127,8 +127,8 @@ export type SyncRefs = {
  */
 export const useCanvasSyncFirebase = (
   canvasRef: RefObject<any>,
-  journalSync?: { onAction: (action: any) => void },
-  boardSyncHandlers?: any
+  journalSync?: JournalSyncHandlers,
+  boardSyncHandlers?: BoardSyncHandlers
 ) => {
   const [isConnected, setIsConnected] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<string | null>(null);
@@ -340,6 +340,34 @@ export const useCanvasSyncFirebase = (
       }
     });
 
+    // Ascolta stato journal (scroll, selezione, etc.)
+    const journalStateListener = onValue(ref(database, `rooms/${roomId}/journalState`), (snapshot) => {
+      const data = snapshot.val();
+      if (data && data.clientId !== clientIdRef.current && journalSync?.onState) {
+        console.log('[Firebase] 📥 Received journal state:', data.state);
+        try {
+          journalSync.onState(data.state);
+          console.log('[Firebase] ✅ Journal state applied successfully');
+        } catch (error) {
+          console.error('[Firebase] 💥 Error applying journal state:', error);
+        }
+      }
+    });
+
+    // Ascolta stato board (scroll, pagine, etc.)
+    const boardStateListener = onValue(ref(database, `rooms/${roomId}/boardState`), (snapshot) => {
+      const data = snapshot.val();
+      if (data && data.clientId !== clientIdRef.current && boardSyncHandlers?.onState) {
+        console.log('[Firebase] 📥 Received board state:', data.state);
+        try {
+          boardSyncHandlers.onState(data.state);
+          console.log('[Firebase] ✅ Board state applied successfully');
+        } catch (error) {
+          console.error('[Firebase] 💥 Error applying board state:', error);
+        }
+      }
+    });
+
     // Ascolta eventi board
     const boardListener = onChildAdded(boardDataRef, (snapshot) => {
       const data = snapshot.val();
@@ -362,6 +390,8 @@ export const useCanvasSyncFirebase = (
       usersListener,
       canvasStateListener,
       journalListener,
+      journalStateListener,
+      boardStateListener,
       boardListener
     ];
 
