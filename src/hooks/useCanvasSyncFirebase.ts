@@ -230,6 +230,7 @@ export const useCanvasSyncFirebase = (
     });
 
     // Ascolta stato canvas snapshot (leggero e veloce)
+    console.log('🔧🔧🔧 CREATING CANVAS STATE LISTENER... 🔧🔧🔧');
     const canvasStateListener = onValue(ref(database, `rooms/${roomId}/canvasState`), (snapshot) => {
       console.log('🚨🚨🚨 CANVAS STATE LISTENER TRIGGERED! 🚨🚨🚨');
       const data = snapshot.val();
