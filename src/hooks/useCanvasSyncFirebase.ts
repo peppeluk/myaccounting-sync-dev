@@ -229,33 +229,37 @@ export const useCanvasSyncFirebase = (
       cleanupOldData(roomId);
     });
 
-    // Ascolta stato canvas snapshot (leggero e veloce)
+    // Ascolta stati canvas di tutti i client (leggero e veloce)
     console.log('🔧🔧🔧 CREATING CANVAS STATE LISTENER... 🔧🔧🔧');
-    const canvasStateListener = onValue(ref(database, `rooms/${roomId}/canvasState`), (snapshot) => {
-      console.log('🚨🚨🚨 CANVAS STATE LISTENER TRIGGERED! 🚨🚨🚨');
-      const data = snapshot.val();
-      if (!data) return;
+    const canvasStatesListener = onValue(ref(database, `rooms/${roomId}/canvasStates`), (snapshot) => {
+      console.log('🚨🚨🚨 CANVAS STATES LISTENER TRIGGERED! 🚨🚨🚨');
+      const allStates = snapshot.val();
+      if (!allStates) return;
       
-      console.log('[Firebase] 📥 RAW canvas snapshot received:', data);
-      console.log('[Firebase] 🔍 Canvas ref available:', !!canvasRef.current);
-      console.log('[Firebase] 🔍 Client ID check:', data.clientId, 'vs', clientIdRef.current);
-      console.log('[Firebase] 🔍 State data:', !!data.state);
-      console.log('[Firebase] 🔍 State objects:', data.state?.objects?.length || 0);
-      console.log('[Firebase] 🔍 Fabric available:', !!fabric);
-      
-      // Log completo per debug
-      console.log('[Firebase] 🔍 COMPLETE CANVAS STATE ANALYSIS:');
-      console.log('  - data.clientId:', data.clientId);
-      console.log('  - clientIdRef.current:', clientIdRef.current);
-      console.log('  - data.clientId type:', typeof data.clientId);
-      console.log('  - clientIdRef.current type:', typeof clientIdRef.current);
-      console.log('  - data.clientId === clientIdRef.current:', data.clientId === clientIdRef.current);
-      console.log('  - data.clientId !== clientIdRef.current:', data.clientId !== clientIdRef.current);
-      console.log('  - canvasRef.current:', !!canvasRef.current);
-      console.log('  - data.state:', !!data.state);
-      console.log('  - data.state.objects:', data.state?.objects?.length || 0);
-      
-      if (data.clientId !== clientIdRef.current && canvasRef.current && data.state) {
+      // Itera su tutti i client states
+      Object.entries(allStates).forEach(([, data]: [string, any]) => {
+        if (!data) return;
+        
+        console.log('[Firebase] 📥 RAW canvas snapshot received:', data);
+        console.log('[Firebase] 🔍 Canvas ref available:', !!canvasRef.current);
+        console.log('[Firebase] 🔍 Client ID check:', data.clientId, 'vs', clientIdRef.current);
+        console.log('[Firebase] 🔍 State data:', !!data.state);
+        console.log('[Firebase] 🔍 State objects:', data.state?.objects?.length || 0);
+        console.log('[Firebase] 🔍 Fabric available:', !!fabric);
+        
+        // Log completo per debug
+        console.log('[Firebase] 🔍 COMPLETE CANVAS STATE ANALYSIS:');
+        console.log('  - data.clientId:', data.clientId);
+        console.log('  - clientIdRef.current:', clientIdRef.current);
+        console.log('  - data.clientId type:', typeof data.clientId);
+        console.log('  - clientIdRef.current type:', typeof clientIdRef.current);
+        console.log('  - data.clientId === clientIdRef.current:', data.clientId === clientIdRef.current);
+        console.log('  - data.clientId !== clientIdRef.current:', data.clientId !== clientIdRef.current);
+        console.log('  - canvasRef.current:', !!canvasRef.current);
+        console.log('  - data.state:', !!data.state);
+        console.log('  - data.state.objects:', data.state?.objects?.length || 0);
+        
+        if (data.clientId !== clientIdRef.current && canvasRef.current && data.state) {
         console.log('[Firebase] 🎯 Conditions met - applying remote canvas state');
         // Imposta flag per prevenire loop infinito
         isApplyingRemoteDataRef.current = true;
@@ -446,6 +450,7 @@ export const useCanvasSyncFirebase = (
         console.log('  - data.state:', !!data.state);
         console.log('  - data.state.objects:', data.state?.objects?.length || 0);
       }
+      });
     });
 
     // Sincronizza journal esistente all'join
@@ -535,7 +540,7 @@ export const useCanvasSyncFirebase = (
     // Aggiungi tutti i listeners
     listenersRef.current = [
       usersListener,
-      canvasStateListener,
+      canvasStatesListener,
       journalListener,
       journalStateListener,
       boardStateListener,
@@ -589,14 +594,17 @@ export const useCanvasSyncFirebase = (
       });
     }, { onlyOnce: true });
     
-    // Cleanup canvasState vecchio (se esiste)
-    const canvasStateRef = ref(database, `rooms/${roomId}/canvasState`);
-    onValue(canvasStateRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data && data.timestamp && (now - data.timestamp) > maxAge) {
-        console.log(`[Firebase] 🗑️ Removing old canvas state snapshot`);
-        remove(canvasStateRef);
-      }
+    // Cleanup canvasStates vecchi (se esistono)
+    const canvasStatesRef = ref(database, `rooms/${roomId}/canvasStates`);
+    onValue(canvasStatesRef, (snapshot) => {
+      const states = snapshot.val() || {};
+      Object.entries(states).forEach(([clientId, state]: [string, any]) => {
+        const timestamp = state.timestamp || 0;
+        if (now - timestamp > maxAge) {
+          console.log(`[Firebase] 🗑️ Removing old canvas state: ${clientId}`);
+          remove(ref(database, `rooms/${roomId}/canvasStates/${clientId}`));
+        }
+      });
     }, { onlyOnce: true });
   }, [database]);
 
@@ -657,10 +665,10 @@ export const useCanvasSyncFirebase = (
         console.log('[Firebase] ✅ Cleared all users');
       });
 
-      // Rimuovi canvas state
-      const canvasStateRef = ref(database, `rooms/${roomId}/canvasState`);
-      remove(canvasStateRef).then(() => {
-        console.log('[Firebase] ✅ Cleared canvas state');
+      // Rimuovi canvas states
+      const canvasStatesRef = ref(database, `rooms/${roomId}/canvasStates`);
+      remove(canvasStatesRef).then(() => {
+        console.log('[Firebase] ✅ Cleared canvas states');
       });
 
       // Rimuovi canvas history
@@ -1019,8 +1027,8 @@ export const useCanvasSyncFirebase = (
         }
       };
 
-      // Sovrascrivi invece di push per evitare accumulo
-      const canvasStateRef = ref(database, `rooms/${currentRoomRef.current}/canvasState`);
+      // Salva canvas state per questo client specifico (non sovrascrivere gli altri)
+      const canvasStateRef = ref(database, `rooms/${currentRoomRef.current}/canvasStates/${clientIdRef.current}`);
       set(canvasStateRef, {
         clientId: clientIdRef.current,
         state: canvasState,
