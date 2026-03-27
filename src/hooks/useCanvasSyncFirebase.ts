@@ -133,6 +133,7 @@ export const useCanvasSyncFirebase = (
   const [isConnected, setIsConnected] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<string | null>(null);
   const [connectedUsers, setConnectedUsers] = useState(0);
+  const [connectedUsersList, setConnectedUsersList] = useState<any[]>([]);
   
   const clientIdRef = useRef<string>('');
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -222,6 +223,7 @@ export const useCanvasSyncFirebase = (
         connectedAt: user.connectedAt || Date.now()
       }));
       setConnectedUsers(usersList.length);
+      setConnectedUsersList(usersList); // Salva la lista completa
       
       // Cleanup dati vecchi ogni 30 secondi
       cleanupOldData(roomId);
@@ -846,6 +848,7 @@ export const useCanvasSyncFirebase = (
     isConnected,
     currentRoom,
     connectedUsers,
+    connectedUsersList,
     joinRoom,
     leaveRoom,
     sendJournalAction,
@@ -858,7 +861,7 @@ export const useCanvasSyncFirebase = (
     getAllRooms,
     deleteRoom,
     deleteAllRooms,
+    currentRoomRef,
     clientIdRef,
-    currentRoomRef
   };
 }

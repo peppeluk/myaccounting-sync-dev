@@ -11,6 +11,8 @@ type SyncRoomManagerProps = {
   onDeleteRoom?: (roomId: string) => Promise<boolean>;
   onDeleteAllRooms?: () => Promise<boolean>;
   connectedUsers?: number;
+  connectedUsersList?: any[]; // Nuova prop per lista utenti reali
+  currentClientId?: string; // Nuova prop per identificare utente corrente
 };
 
 export function SyncRoomManager({
@@ -23,7 +25,9 @@ export function SyncRoomManager({
   onGetAllRooms,
   onDeleteRoom,
   onDeleteAllRooms,
-  connectedUsers = 0
+  connectedUsers = 0,
+  connectedUsersList = [],
+  currentClientId = ''
 }: SyncRoomManagerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [roomInput, setRoomInput] = useState('');
@@ -69,6 +73,42 @@ export function SyncRoomManager({
     if (diff < 3600000) return `${Math.floor(diff / 60000)} min fa`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)} ore fa`;
     return `${Math.floor(diff / 86400000)} giorni fa`;
+  };
+
+  // Formatta timestamp connessione
+  const formatConnectionTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('it-IT', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  };
+
+  // Formatta data completa
+  const formatFullDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleString('it-IT', { 
+      day: '2-digit',
+      month: '2-digit', 
+      hour: '2-digit', 
+      minute: '2-digit'
+    });
+  };
+
+  // Ottieni nome display per utente
+  const getUserDisplayName = (user: any) => {
+    if (user.nickname) return user.nickname;
+    if (user.ipAddress) return `PC ${user.ipAddress}`;
+    return `Client ${user.clientId?.slice(-8) || 'Unknown'}`;
+  };
+
+  // Ordina utenti per tempo di connessione (prima connessi prima)
+  const getSortedUsers = () => {
+    if (!connectedUsersList || connectedUsersList.length === 0) return [];
+    return [...connectedUsersList].sort((a, b) => 
+      (a.connectedAt || a.connectedAt || 0) - (b.connectedAt || b.connectedAt || 0)
+    );
   };
 
   // Gestione eliminazione stanza
@@ -273,26 +313,89 @@ export function SyncRoomManager({
                             </button>
                           )}
                         </h4>
-                        <ul>
-                          {Array.from({ length: connectedUsers }, (_, i) => (
-                            <li key={i}>
-                              Utente {i + 1}
-                              {i > 0 && onDisconnectUser && (
-                                <button 
-                                  onClick={() => {
-                                    if (confirm(`Disconnettere Utente ${i + 1}?`)) {
-                                      onDisconnectUser(`user-${i}`);
-                                    }
-                                  }}
-                                  className="btn-small btn-danger"
-                                  style={{ marginLeft: '10px', fontSize: '10px' }}
-                                  title={`Disconnetti Utente ${i + 1}`}
-                                >
-                                  <i className="fa-solid fa-times" />
-                                </button>
-                              )}
-                            </li>
-                          ))}
+                        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                          {getSortedUsers().map((user, index) => {
+                            const isCurrentUser = user.clientId === currentClientId;
+                            const displayName = getUserDisplayName(user);
+                            const connectionTime = user.connectedAt || user.connectedAt || Date.now();
+                            
+                            return (
+                              <li 
+                                key={user.clientId || user.id || index}
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  padding: '8px 12px',
+                                  marginBottom: '6px',
+                                  background: isCurrentUser ? '#e8f4fd' : '#f8f9fa',
+                                  borderRadius: '6px',
+                                  border: isCurrentUser ? '1px solid #007bff' : '1px solid #e0e0e0'
+                                }}
+                              >
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: 'bold', color: '#333', marginBottom: '2px' }}>
+                                    <i className="fa-solid fa-user" style={{ marginRight: '6px', color: isCurrentUser ? '#007bff' : '#6c757d' }} />
+                                    {displayName}
+                                    {isCurrentUser && (
+                                      <span style={{
+                                        background: '#007bff',
+                                        color: 'white',
+                                        padding: '2px 8px',
+                                        borderRadius: '12px',
+                                        fontSize: '10px',
+                                        marginLeft: '8px',
+                                        fontWeight: 'normal'
+                                      }}>
+                                        Tu
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#666', display: 'flex', gap: '15px' }}>
+                                    <span>
+                                      <i className="fa-solid fa-fingerprint" style={{ marginRight: '4px' }} />
+                                      ID: {(user.clientId || user.id || 'unknown').slice(-8)}
+                                    </span>
+                                    {user.ipAddress && (
+                                      <span>
+                                        <i className="fa-solid fa-network-wired" style={{ marginRight: '4px' }} />
+                                        IP: {user.ipAddress}
+                                      </span>
+                                    )}
+                                    <span>
+                                      <i className="fa-solid fa-clock" style={{ marginRight: '4px' }} />
+                                      {formatConnectionTime(connectionTime)}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>
+                                    Connesso: {formatFullDate(connectionTime)}
+                                  </div>
+                                </div>
+                                
+                                {!isCurrentUser && onDisconnectUser && (
+                                  <button 
+                                    onClick={() => {
+                                      if (confirm(`Disconnettere ${displayName}?`)) {
+                                        onDisconnectUser(user.clientId || user.id);
+                                      }
+                                    }}
+                                    className="btn-small btn-danger"
+                                    style={{ 
+                                      fontSize: '10px', 
+                                      padding: '4px 8px',
+                                      background: '#dc3545',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '4px'
+                                    }}
+                                    title={`Disconnetti ${displayName}`}
+                                  >
+                                    <i className="fa-solid fa-times" />
+                                  </button>
+                                )}
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     )}

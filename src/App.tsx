@@ -875,7 +875,9 @@ function App() {
     deleteAllRooms,
     currentRoom: syncCurrentRoom,
     connectedUsers: syncConnectedUsers,
-    currentRoomRef: syncCurrentRoomRef
+    connectedUsersList: syncConnectedUsersList,
+    currentRoomRef: syncCurrentRoomRef,
+    clientIdRef: syncClientIdRef
   } = useCanvasSyncFirebase(
     syncCanvasRef,
     journalSyncHandlers,
@@ -6608,6 +6610,8 @@ function App() {
           onDeleteRoom={deleteRoom}
           onDeleteAllRooms={deleteAllRooms}
           connectedUsers={syncConnectedUsers}
+          connectedUsersList={syncConnectedUsersList}
+          currentClientId={syncClientIdRef.current}
         />
 
         {/* Mobile Menu Content - vuoto, i pulsanti principali sono sempre visibili */}
