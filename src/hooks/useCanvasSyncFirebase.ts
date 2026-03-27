@@ -256,59 +256,64 @@ export const useCanvasSyncFirebase = (
                 // Pulisci canvas in modo efficiente
                 canvasRef.current.clear();
                 
-                // Ricostruisci oggetti con logica personalizzata per le immagini
+                // Ricostruisci oggetti con logica migliorata
                 const reconstructObjects = async (objectsData: any[]) => {
+                  // Separa immagini da altri oggetti
+                  const imageObjects = objectsData.filter(obj => obj.type === 'image');
+                  const otherObjects = objectsData.filter(obj => obj.type !== 'image');
+                  
                   const reconstructed: any[] = [];
                   
-                  for (const objData of objectsData) {
+                  // Ricostruisci immagini separatamente
+                  for (const objData of imageObjects) {
                     try {
-                      let obj: any = null;
-                      
-                      switch (objData.type) {
-                        case 'image':
-                          // Ricostruisci immagine con src
-                          if (objData.src) {
-                            obj = await new Promise((resolve, reject) => {
-                              const img = new Image();
-                              img.crossOrigin = objData.crossOrigin || 'anonymous';
-                              img.onload = () => {
-                                try {
-                                  const fabricImg = new fabric.Image(img, {
-                                    left: objData.left,
-                                    top: objData.top,
-                                    width: objData.width,
-                                    height: objData.height,
-                                    selectable: objData.selectable,
-                                    evented: objData.evented,
-                                    opacity: objData.opacity
-                                  });
-                                  
-                                  // Ripristina dimensioni originali se presenti
-                                  (fabricImg as any).originalWidth = objData.originalWidth;
-                                  (fabricImg as any).originalHeight = objData.originalHeight;
-                                  
-                                  resolve(fabricImg);
-                                } catch (e) {
-                                  reject(e);
-                                }
-                              };
-                              img.onerror = reject;
-                              img.src = objData.src;
-                            });
-                          }
-                          break;
-                          
-                        default:
-                          // Per tutti gli altri tipi, usa il metodo standard di Fabric
-                          obj = objData;
-                          break;
-                      }
-                      
-                      if (obj) {
-                        reconstructed.push(obj);
+                      if (objData.src) {
+                        const img = await new Promise((resolve, reject) => {
+                          const image = new Image();
+                          image.crossOrigin = objData.crossOrigin || 'anonymous';
+                          image.onload = () => {
+                            try {
+                              const fabricImg = new fabric.Image(image, {
+                                left: objData.left,
+                                top: objData.top,
+                                width: objData.width,
+                                height: objData.height,
+                                selectable: objData.selectable,
+                                evented: objData.evented,
+                                opacity: objData.opacity
+                              });
+                              
+                              // Ripristina dimensioni originali se presenti
+                              (fabricImg as any).originalWidth = objData.originalWidth;
+                              (fabricImg as any).originalHeight = objData.originalHeight;
+                              
+                              resolve(fabricImg);
+                            } catch (e) {
+                              reject(e);
+                            }
+                          };
+                          image.onerror = reject;
+                          image.src = objData.src;
+                        });
+                        reconstructed.push(img);
                       }
                     } catch (error) {
-                      console.error('[Firebase] Error reconstructing object:', objData, error);
+                      console.error('[Firebase] Error reconstructing image:', objData, error);
+                    }
+                  }
+                  
+                  // Ricostruisci altri oggetti con fabric.util.enlivenObjects
+                  if (otherObjects.length > 0) {
+                    try {
+                      const enlivenedObjects = await new Promise<any[]>((resolve) => {
+                        (fabric.util.enlivenObjects as any)(otherObjects, (objects: any[]) => {
+                          resolve(objects);
+                        });
+                      });
+                      reconstructed.push(...enlivenedObjects);
+                    } catch (error) {
+                      console.error('[Firebase] Error enlivening objects:', error);
+                      throw error;
                     }
                   }
                   
@@ -337,21 +342,31 @@ export const useCanvasSyncFirebase = (
                   }, 100);
                 }).catch((error) => {
                   console.error('[Firebase] 💥 Error reconstructing objects:', error);
-                  // Fallback al metodo standard se la ricostruzione personalizzata fallisce
-                  fabric.util.enlivenObjects(data.state.objects).then((objects) => {
-                    canvasRef.current.renderOnAddRemove = false;
-                    objects.forEach((obj: any) => {
-                      if (obj) {
-                        canvasRef.current.add(obj);
-                      }
+                  console.log('[Firebase] 🔄 Attempting fallback with standard enlivenObjects...');
+                  
+                  // Fallback: prova con enlivenObjects su tutti gli oggetti
+                  try {
+                    (fabric.util.enlivenObjects as any)(data.state.objects, (objects: any[]) => {
+                      console.log('[Firebase] ✅ Fallback successful, applying objects...');
+                      canvasRef.current.renderOnAddRemove = false;
+                      objects.forEach((obj: any) => {
+                        if (obj) {
+                          canvasRef.current.add(obj);
+                        }
+                      });
+                      canvasRef.current.renderOnAddRemove = true;
+                      canvasRef.current.renderAll();
+                      setTimeout(() => {
+                        canvasRef.current.__eventListeners = originalEvents;
+                        isApplyingRemoteDataRef.current = false;
+                        console.log('[Firebase] ✅ Fallback applied successfully');
+                      }, 100);
                     });
-                    canvasRef.current.renderOnAddRemove = true;
-                    canvasRef.current.renderAll();
-                    setTimeout(() => {
-                      canvasRef.current.__eventListeners = originalEvents;
-                      isApplyingRemoteDataRef.current = false;
-                    }, 100);
-                  });
+                  } catch (fallbackError) {
+                    console.error('[Firebase] 💥 Fallback also failed:', fallbackError);
+                    canvasRef.current.__eventListeners = originalEvents;
+                    isApplyingRemoteDataRef.current = false;
+                  }
                 });
               } catch (error) {
                 console.error('[Firebase] 💥 Error in canvas update:', error);
