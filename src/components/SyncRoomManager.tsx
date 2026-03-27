@@ -28,9 +28,9 @@ export function SyncRoomManager({
   const [isOpen, setIsOpen] = useState(false);
   const [roomInput, setRoomInput] = useState('');
   const [nicknameInput, setNicknameInput] = useState('');
-  const [allRooms, setAllRooms] = useState<any[]>([]);
-  const [showRoomManager, setShowRoomManager] = useState(false);
+  const [activeTab, setActiveTab] = useState<'join' | 'manage'>('join');
   const [loadingRooms, setLoadingRooms] = useState(false);
+  const [allRooms, setAllRooms] = useState<any[]>([]);
 
   // Carica nickname salvato
   useEffect(() => {
@@ -52,6 +52,13 @@ export function SyncRoomManager({
       setLoadingRooms(false);
     }
   };
+
+  // Carica stanze quando si apre il tab gestione
+  useEffect(() => {
+    if (isOpen && activeTab === 'manage' && allRooms.length === 0) {
+      loadRooms();
+    }
+  }, [isOpen, activeTab]);
 
   // Formatta data attività
   const formatLastActivity = (timestamp: number) => {
@@ -109,21 +116,6 @@ export function SyncRoomManager({
           {' '}{isConnected ? 'Disconnetti' : 'Sincronizzazione LAN'}
         </button>
 
-        {/* Pulsante gestione stanze */}
-        <button 
-          onClick={() => {
-            setShowRoomManager(!showRoomManager);
-            if (!showRoomManager) {
-              loadRooms();
-            }
-          }}
-          className="sync-button"
-          title="Gestione stanze Firebase"
-        >
-          <i className="fa-solid fa-database" />
-          {' '}Gestione Stanze
-        </button>
-
         {/* Pannello sincronizzazione */}
         {isOpen && (
           <div className="modal-overlay" onClick={() => setIsOpen(false)}>
@@ -138,293 +130,334 @@ export function SyncRoomManager({
                 </button>
               </div>
 
-              <div className="modal-body">
-                <div className="form-group">
-                  <label>
-                    <i className="fa-solid fa-door-open" />
-                    Nome stanza
-                  </label>
-                  <input
-                    type="text"
-                    value={roomInput}
-                    onChange={(e) => setRoomInput(e.target.value)}
-                    placeholder="Es: aula-1a, aula-3c"
-                    className="form-input"
-                  />
-                  <small className="form-hint">
-                    Scegli un nome univoco per la tua stanza di lavoro
-                  </small>
-                </div>
-
-                <div className="form-group">
-                  <label>
-                    <i className="fa-solid fa-user" />
-                    Nome dispositivo (opzionale)
-                  </label>
-                  <input
-                    type="text"
-                    value={nicknameInput}
-                    onChange={(e) => {
-                      setNicknameInput(e.target.value);
-                      localStorage.setItem('sync-nickname', e.target.value);
-                    }}
-                    placeholder="Il tuo nome"
-                    className="form-input"
-                  />
-                  <small className="form-hint">
-                    Tutti i dispositivi nella stessa stanza si sincronizzano
-                  </small>
-                </div>
-
-                <button onClick={handleJoin} className="btn-primary btn-block">
-                  <i className="fa-solid fa-right-to-bracket" />
-                  Entra nella stanza
+              {/* Tab Navigation */}
+              <div className="tab-navigation" style={{
+                display: 'flex',
+                borderBottom: '1px solid #e0e0e0',
+                marginBottom: '20px'
+              }}>
+                <button
+                  onClick={() => setActiveTab('join')}
+                  className={`tab-button ${activeTab === 'join' ? 'active' : ''}`}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    border: 'none',
+                    background: activeTab === 'join' ? '#007bff' : '#f8f9fa',
+                    color: activeTab === 'join' ? 'white' : '#333',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <i className="fa-solid fa-right-to-bracket" /> Entra nella Stanza
                 </button>
+                <button
+                  onClick={() => setActiveTab('manage')}
+                  className={`tab-button ${activeTab === 'manage' ? 'active' : ''}`}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    border: 'none',
+                    background: activeTab === 'manage' ? '#007bff' : '#f8f9fa',
+                    color: activeTab === 'manage' ? 'white' : '#333',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <i className="fa-solid fa-database" /> Gestione Stanze
+                  {allRooms.length > 0 && (
+                    <span style={{
+                      background: '#28a745',
+                      color: 'white',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontSize: '11px',
+                      marginLeft: '8px'
+                    }}>
+                      {allRooms.length}
+                    </span>
+                  )}
+                </button>
+              </div>
 
-                {isConnected && (
-                  <div className="sync-status">
-                    <div className="sync-indicator">
-                      <div className="sync-dot active"></div>
-                      <span>Connesso a: {currentRoom}</span>
+              <div className="modal-body">
+                {/* Tab Entra nella Stanza */}
+                {activeTab === 'join' && (
+                  <>
+                    <div className="form-group">
+                      <label>
+                        <i className="fa-solid fa-door-open" />
+                        Nome stanza
+                      </label>
+                      <input
+                        type="text"
+                        value={roomInput}
+                        onChange={(e) => setRoomInput(e.target.value)}
+                        placeholder="Es: aula-1a, aula-3c"
+                        className="form-input"
+                      />
+                      <small className="form-hint">
+                        Scegli un nome univoco per la tua stanza di lavoro
+                      </small>
                     </div>
-                    <div className="sync-users">
-                      <i className="fa-solid fa-users" />
-                      Dispositivi connessi: {connectedUsers}
-                    </div>
-                  </div>
-                )}
 
-                {connectedUsers > 0 && (
-                  <div className="sync-connected-users">
-                    <h4>
-                      <i className="fa-solid fa-users" />
-                      Dispositivi connessi ({connectedUsers})
-                      {connectedUsers > 1 && onDisconnectAll && (
-                        <button 
-                          onClick={() => {
-                            if (confirm('Disconnettere tutti gli altri utenti?')) {
-                              onDisconnectAll();
-                            }
-                          }}
-                          className="btn-small btn-danger"
-                          style={{ marginLeft: '10px', fontSize: '11px' }}
-                          title="Disconnetti tutti gli altri utenti"
-                        >
-                          <i className="fa-solid fa-user-slash" />
-                        </button>
-                      )}
-                      {onClearRoom && (
-                        <button 
-                          onClick={() => {
-                            if (confirm('⚠️ SVUOTARE COMPLETAMENTE LA STANZA?\n\nQuesta azione cancellerà:\n• Tutti gli utenti connessi\n• Tutti i disegni salvati\n• Tutte le note del journal\n• Tutti i dati della board\n\nQuesto processo è IRREVERSIBILE!')) {
-                              onClearRoom();
-                            }
-                          }}
-                          className="btn-small btn-warning"
-                          style={{ marginLeft: '10px', fontSize: '11px' }}
-                          title="Svuota completamente la stanza"
-                        >
-                          <i className="fa-solid fa-trash-can" />
-                        </button>
-                      )}
-                    </h4>
-                    <ul>
-                      {Array.from({ length: connectedUsers }, (_, i) => (
-                        <li key={i}>
-                          Utente {i + 1}
-                          {i > 0 && onDisconnectUser && (
+                    <div className="form-group">
+                      <label>
+                        <i className="fa-solid fa-user" />
+                        Nome dispositivo (opzionale)
+                      </label>
+                      <input
+                        type="text"
+                        value={nicknameInput}
+                        onChange={(e) => {
+                          setNicknameInput(e.target.value);
+                          localStorage.setItem('sync-nickname', e.target.value);
+                        }}
+                        placeholder="Il tuo nome"
+                        className="form-input"
+                      />
+                      <small className="form-hint">
+                        Tutti i dispositivi nella stessa stanza si sincronizzano
+                      </small>
+                    </div>
+
+                    <button onClick={handleJoin} className="btn-primary btn-block">
+                      <i className="fa-solid fa-right-to-bracket" />
+                      Entra nella stanza
+                    </button>
+
+                    {isConnected && (
+                      <div className="sync-status">
+                        <div className="sync-indicator">
+                          <div className="sync-dot active"></div>
+                          <span>Connesso a: {currentRoom}</span>
+                        </div>
+                        <div className="sync-users">
+                          <i className="fa-solid fa-users" />
+                          Dispositivi connessi: {connectedUsers}
+                        </div>
+                      </div>
+                    )}
+
+                    {connectedUsers > 0 && (
+                      <div className="sync-connected-users">
+                        <h4>
+                          <i className="fa-solid fa-users" />
+                          Dispositivi connessi ({connectedUsers})
+                          {connectedUsers > 1 && onDisconnectAll && (
                             <button 
                               onClick={() => {
-                                if (confirm(`Disconnettere Utente ${i + 1}?`)) {
-                                  onDisconnectUser(`user-${i}`);
+                                if (confirm('Disconnettere tutti gli altri utenti?')) {
+                                  onDisconnectAll();
                                 }
                               }}
                               className="btn-small btn-danger"
-                              style={{ marginLeft: '10px', fontSize: '10px' }}
-                              title={`Disconnetti Utente ${i + 1}`}
+                              style={{ marginLeft: '10px', fontSize: '11px' }}
+                              title="Disconnetti tutti gli altri utenti"
                             >
-                              <i className="fa-solid fa-times" />
+                              <i className="fa-solid fa-user-slash" />
                             </button>
                           )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                          {onClearRoom && (
+                            <button 
+                              onClick={() => {
+                                if (confirm('⚠️ SVUOTARE COMPLETAMENTE LA STANZA?\n\nQuesta azione cancellerà:\n• Tutti gli utenti connessi\n• Tutti i disegni salvati\n• Tutte le note del journal\n• Tutti i dati della board\n\nQuesto processo è IRREVERSIBILE!')) {
+                                  onClearRoom();
+                                }
+                              }}
+                              className="btn-small btn-warning"
+                              style={{ marginLeft: '10px', fontSize: '11px' }}
+                              title="Svuota completamente la stanza"
+                            >
+                              <i className="fa-solid fa-trash-can" />
+                            </button>
+                          )}
+                        </h4>
+                        <ul>
+                          {Array.from({ length: connectedUsers }, (_, i) => (
+                            <li key={i}>
+                              Utente {i + 1}
+                              {i > 0 && onDisconnectUser && (
+                                <button 
+                                  onClick={() => {
+                                    if (confirm(`Disconnettere Utente ${i + 1}?`)) {
+                                      onDisconnectUser(`user-${i}`);
+                                    }
+                                  }}
+                                  className="btn-small btn-danger"
+                                  style={{ marginLeft: '10px', fontSize: '10px' }}
+                                  title={`Disconnetti Utente ${i + 1}`}
+                                >
+                                  <i className="fa-solid fa-times" />
+                                </button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Tab Gestione Stanze */}
+                {activeTab === 'manage' && (
+                  <>
+                    {loadingRooms ? (
+                      <div style={{ textAlign: 'center', padding: '40px' }}>
+                        <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '24px', marginBottom: '15px' }} />
+                        <div>Caricamento stanze...</div>
+                      </div>
+                    ) : allRooms.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                        <i className="fa-solid fa-inbox" style={{ fontSize: '48px', marginBottom: '15px', opacity: 0.5 }} />
+                        <div>Nessuna stanza trovata</div>
+                        <small>Non ci sono stanze attive su Firebase</small>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Header con controlli */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '15px', background: '#f8f9fa', borderRadius: '8px' }}>
+                          <div>
+                            <h4 style={{ margin: 0, color: '#333' }}>
+                              <i className="fa-solid fa-server" /> {allRooms.length} Stanze Trovate
+                            </h4>
+                            <small style={{ color: '#666' }}>Gestione stanze Firebase</small>
+                          </div>
+                          <button 
+                            onClick={handleDeleteAllRooms}
+                            className="btn-small btn-danger"
+                            title="Elimina tutte le stanze"
+                          >
+                            <i className="fa-solid fa-trash-can" /> Elimina Tutte
+                          </button>
+                        </div>
+
+                        {/* Lista stanze */}
+                        <div className="rooms-list" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                          {allRooms.map((room) => (
+                            <div 
+                              key={room.id}
+                              className="room-item"
+                              style={{
+                                border: '1px solid #e0e0e0',
+                                borderRadius: '8px',
+                                padding: '16px',
+                                marginBottom: '12px',
+                                background: room.id === currentRoom ? '#e8f4fd' : 'white',
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: 'bold', color: '#333', marginBottom: '8px', fontSize: '16px' }}>
+                                    <i className="fa-solid fa-door-open" style={{ marginRight: '8px', color: '#007bff' }} />
+                                    {room.name}
+                                    {room.id === currentRoom && (
+                                      <span style={{
+                                        background: '#007bff',
+                                        color: 'white',
+                                        padding: '4px 12px',
+                                        borderRadius: '16px',
+                                        fontSize: '12px',
+                                        marginLeft: '12px',
+                                        fontWeight: 'normal'
+                                      }}>
+                                        <i className="fa-solid fa-check" /> Corrente
+                                      </span>
+                                    )}
+                                  </div>
+                                  
+                                  <div style={{ display: 'flex', gap: '20px', marginBottom: '12px', fontSize: '14px', color: '#666' }}>
+                                    <div>
+                                      <i className="fa-solid fa-users" style={{ marginRight: '6px', color: '#28a745' }} />
+                                      {room.userCount} utente{room.userCount !== 1 ? 'i' : ''}
+                                    </div>
+                                    <div>
+                                      <i className="fa-solid fa-clock" style={{ marginRight: '6px', color: '#6c757d' }} />
+                                      {formatLastActivity(room.lastActivity)}
+                                    </div>
+                                  </div>
+
+                                  <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: '#888' }}>
+                                    <span style={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      gap: '6px',
+                                      color: room.hasCanvas ? '#28a745' : '#ccc'
+                                    }}>
+                                      <i className="fa-solid fa-paint-brush" /> Canvas
+                                    </span>
+                                    <span style={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      gap: '6px',
+                                      color: room.hasJournal ? '#28a745' : '#ccc'
+                                    }}>
+                                      <i className="fa-solid fa-book" /> Journal
+                                    </span>
+                                    <span style={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      gap: '6px',
+                                      color: room.hasBoard ? '#28a745' : '#ccc'
+                                    }}>
+                                      <i className="fa-solid fa-chalkboard" /> Board
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '120px' }}>
+                                  <button 
+                                    onClick={() => onJoinRoom(room.id)}
+                                    disabled={room.id === currentRoom}
+                                    className="btn-small"
+                                    style={{ 
+                                      width: '100%',
+                                      fontSize: '12px', 
+                                      padding: '8px 12px',
+                                      opacity: room.id === currentRoom ? 0.5 : 1,
+                                      background: room.id === currentRoom ? '#6c757d' : '#007bff',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '6px'
+                                    }}
+                                    title={room.id === currentRoom ? 'Sei già in questa stanza' : 'Entra nella stanza'}
+                                  >
+                                    <i className="fa-solid fa-sign-in-alt" /> Entra
+                                  </button>
+                                  
+                                  {room.id !== currentRoom && (
+                                    <button 
+                                      onClick={() => handleDeleteRoom(room.id)}
+                                      className="btn-small btn-danger"
+                                      style={{ 
+                                        width: '100%',
+                                        fontSize: '12px', 
+                                        padding: '8px 12px',
+                                        background: '#dc3545',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px'
+                                      }}
+                                      title="Elimina stanza"
+                                    >
+                                      <i className="fa-solid fa-trash" /> Elimina
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
                 )}
               </div>
             </div>
           </div>
         )}
       </div>
-
-      {/* Pannello gestione stanze */}
-      {showRoomManager && (
-        <div className="modal-overlay" onClick={() => setShowRoomManager(false)}>
-          <div className="modal-content sync-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>
-                <i className="fa-solid fa-database" />
-                Gestione Stanze Firebase
-              </h2>
-              <button onClick={() => setShowRoomManager(false)} className="icon-button">
-                <i className="fa-solid fa-xmark" />
-              </button>
-            </div>
-
-            <div className="modal-body">
-              {loadingRooms ? (
-                <div style={{ textAlign: 'center', padding: '40px' }}>
-                  <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '24px', marginBottom: '15px' }} />
-                  <div>Caricamento stanze...</div>
-                </div>
-              ) : allRooms.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-                  <i className="fa-solid fa-inbox" style={{ fontSize: '48px', marginBottom: '15px', opacity: 0.5 }} />
-                  <div>Nessuna stanza trovata</div>
-                  <small>Non ci sono stanze attive su Firebase</small>
-                </div>
-              ) : (
-                <>
-                  {/* Header con controlli */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '15px', background: '#f8f9fa', borderRadius: '8px' }}>
-                    <div>
-                      <h4 style={{ margin: 0, color: '#333' }}>
-                        <i className="fa-solid fa-server" /> {allRooms.length} Stanze Trovate
-                      </h4>
-                      <small style={{ color: '#666' }}>Gestione stanze Firebase</small>
-                    </div>
-                    <button 
-                      onClick={handleDeleteAllRooms}
-                      className="btn-small btn-danger"
-                      title="Elimina tutte le stanze"
-                    >
-                      <i className="fa-solid fa-trash-can" /> Elimina Tutte
-                    </button>
-                  </div>
-
-                  {/* Lista stanze */}
-                  <div className="rooms-list" style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                    {allRooms.map((room) => (
-                      <div 
-                        key={room.id}
-                        className="room-item"
-                        style={{
-                          border: '1px solid #e0e0e0',
-                          borderRadius: '8px',
-                          padding: '16px',
-                          marginBottom: '12px',
-                          background: room.id === currentRoom ? '#e8f4fd' : 'white',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 'bold', color: '#333', marginBottom: '8px', fontSize: '16px' }}>
-                              <i className="fa-solid fa-door-open" style={{ marginRight: '8px', color: '#007bff' }} />
-                              {room.name}
-                              {room.id === currentRoom && (
-                                <span style={{
-                                  background: '#007bff',
-                                  color: 'white',
-                                  padding: '4px 12px',
-                                  borderRadius: '16px',
-                                  fontSize: '12px',
-                                  marginLeft: '12px',
-                                  fontWeight: 'normal'
-                                }}>
-                                  <i className="fa-solid fa-check" /> Corrente
-                                </span>
-                              )}
-                            </div>
-                            
-                            <div style={{ display: 'flex', gap: '20px', marginBottom: '12px', fontSize: '14px', color: '#666' }}>
-                              <div>
-                                <i className="fa-solid fa-users" style={{ marginRight: '6px', color: '#28a745' }} />
-                                {room.userCount} utente{room.userCount !== 1 ? 'i' : ''}
-                              </div>
-                              <div>
-                                <i className="fa-solid fa-clock" style={{ marginRight: '6px', color: '#6c757d' }} />
-                                {formatLastActivity(room.lastActivity)}
-                              </div>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: '#888' }}>
-                              <span style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '6px',
-                                color: room.hasCanvas ? '#28a745' : '#ccc'
-                              }}>
-                                <i className="fa-solid fa-paint-brush" /> Canvas
-                              </span>
-                              <span style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '6px',
-                                color: room.hasJournal ? '#28a745' : '#ccc'
-                              }}>
-                                <i className="fa-solid fa-book" /> Journal
-                              </span>
-                              <span style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '6px',
-                                color: room.hasBoard ? '#28a745' : '#ccc'
-                              }}>
-                                <i className="fa-solid fa-chalkboard" /> Board
-                              </span>
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '120px' }}>
-                            <button 
-                              onClick={() => onJoinRoom(room.id)}
-                              disabled={room.id === currentRoom}
-                              className="btn-small"
-                              style={{ 
-                                width: '100%',
-                                fontSize: '12px', 
-                                padding: '8px 12px',
-                                opacity: room.id === currentRoom ? 0.5 : 1,
-                                background: room.id === currentRoom ? '#6c757d' : '#007bff',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px'
-                              }}
-                              title={room.id === currentRoom ? 'Sei già in questa stanza' : 'Entra nella stanza'}
-                            >
-                              <i className="fa-solid fa-sign-in-alt" /> Entra
-                            </button>
-                            
-                            {room.id !== currentRoom && (
-                              <button 
-                                onClick={() => handleDeleteRoom(room.id)}
-                                className="btn-small btn-danger"
-                                style={{ 
-                                  width: '100%',
-                                  fontSize: '12px', 
-                                  padding: '8px 12px',
-                                  background: '#dc3545',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '6px'
-                                }}
-                                title="Elimina stanza"
-                              >
-                                <i className="fa-solid fa-trash" /> Elimina
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
