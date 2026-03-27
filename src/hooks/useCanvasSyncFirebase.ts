@@ -362,7 +362,9 @@ export const useCanvasSyncFirebase = (
                     console.log(`[Firebase] ✅ Applied ${objects.length} objects from snapshot, events restored`);
                   }, 100);
                 }).catch((error) => {
-                  console.error('[Firebase] 💥 Error reconstructing objects:', error);
+                  console.error('[Firebase] 💥 ERROR IN RECONSTRUCT OBJECTS:', error);
+                  console.error('[Firebase] 💥 ERROR STACK:', error.stack);
+                  console.error('[Firebase] 💥 ERROR TYPE:', error.constructor.name);
                   console.log('[Firebase] 🔄 Attempting fallback with standard enlivenObjects...');
                   
                   // Fallback: prova con enlivenObjects su tutti gli oggetti
