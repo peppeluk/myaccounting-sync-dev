@@ -238,14 +238,18 @@ export const useCanvasSyncFirebase = (
       console.log('[Firebase] 🔍 Canvas ref available:', !!canvasRef.current);
       console.log('[Firebase] 🔍 Client ID check:', data.clientId, 'vs', clientIdRef.current);
       console.log('[Firebase] 🔍 State data:', !!data.state);
+      console.log('[Firebase] 🔍 State objects:', data.state?.objects?.length || 0);
+      console.log('[Firebase] 🔍 Fabric available:', !!fabric);
       
       if (data.clientId !== clientIdRef.current && canvasRef.current && data.state) {
+        console.log('[Firebase] 🎯 Conditions met - applying remote canvas state');
         // Imposta flag per prevenire loop infinito
         isApplyingRemoteDataRef.current = true;
         
         // Applica dati al canvas in modo ottimizzato
         try {
           if (fabric && data.state.objects && Array.isArray(data.state.objects)) {
+            console.log('[Firebase] 🎨 Starting canvas reconstruction with', data.state.objects.length, 'objects');
             // Disattiva temporaneamente eventi canvas per prevenire loop
             const originalEvents = canvasRef.current.__eventListeners;
             canvasRef.current.__eventListeners = {};
@@ -321,6 +325,7 @@ export const useCanvasSyncFirebase = (
                 };
                 
                 reconstructObjects(data.state.objects).then((objects) => {
+                  console.log('[Firebase] 🎯 Reconstructed', objects.length, 'objects, applying to canvas');
                   // Batch aggiunta oggetti per migliorare performance
                   canvasRef.current.renderOnAddRemove = false;
                   
@@ -375,7 +380,7 @@ export const useCanvasSyncFirebase = (
               }
             });
           } else {
-            console.warn('[Firebase] ❌ Invalid fabric module or objects data');
+            console.warn('[Firebase] ⚠️ Cannot apply canvas state - missing fabric or objects');
             isApplyingRemoteDataRef.current = false;
           }
         } catch (error) {
@@ -384,6 +389,11 @@ export const useCanvasSyncFirebase = (
         }
       } else {
         console.log('[Firebase] ⏭️ Skipping canvas snapshot - conditions not met');
+        console.log('[Firebase] 🔍 Condition analysis:');
+        console.log('  - clientId !== clientIdRef.current:', data.clientId !== clientIdRef.current);
+        console.log('  - canvasRef.current:', !!canvasRef.current);
+        console.log('  - data.state:', !!data.state);
+        console.log('  - data.state.objects:', data.state?.objects?.length || 0);
       }
     });
 
