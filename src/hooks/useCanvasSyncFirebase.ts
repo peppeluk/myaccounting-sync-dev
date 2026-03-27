@@ -522,27 +522,53 @@ export const useCanvasSyncFirebase = (
 
   // Ottieni lista di tutte le stanze
   const getAllRooms = useCallback(async () => {
+    console.log('[Firebase] 🔍 getAllRooms called');
+    
     // Inizializza Firebase se necessario
     if (!database && !initializeFirebase()) {
-      console.warn('[Firebase] Cannot get rooms - Firebase initialization failed');
+      console.error('[Firebase] ❌ Cannot get rooms - Firebase initialization failed');
       return [];
     }
 
+    console.log('[Firebase] ✅ Firebase initialized, database available');
+    console.log('[Firebase] 🔧 Firebase config:', {
+      apiKey: firebaseConfig.apiKey ? '✅ Set' : '❌ Missing',
+      databaseURL: firebaseConfig.databaseURL || '❌ Missing',
+      authDomain: firebaseConfig.authDomain || '❌ Missing',
+      projectId: firebaseConfig.projectId || '❌ Missing'
+    });
+
     try {
+      console.log('[Firebase] 📡 Reading from /rooms path...');
       const roomsRef = ref(database, 'rooms');
-      const snapshot = await new Promise<any>((resolve) => {
+      
+      const snapshot = await new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Firebase read timeout after 10 seconds'));
+        }, 10000);
+        
         onValue(roomsRef, (snapshot) => {
+          clearTimeout(timeout);
+          console.log('[Firebase] 📦 Received snapshot from Firebase');
           resolve(snapshot);
         }, { onlyOnce: true });
       });
       
+      console.log('[Firebase] 📊 Snapshot exists:', snapshot.exists());
+      console.log('[Firebase] 📊 Snapshot val():', snapshot.val());
+      
       const roomsData = snapshot.val() || {};
+      console.log('[Firebase] 🗂️ Rooms data type:', typeof roomsData);
+      console.log('[Firebase] 🗂️ Rooms data keys:', Object.keys(roomsData));
+      
       const rooms = Object.keys(roomsData).map(roomId => {
         const room = roomsData[roomId];
+        console.log(`[Firebase] 🏠 Processing room ${roomId}:`, room);
+        
         const users = room.users || {};
         const userCount = Object.keys(users).length;
         
-        return {
+        const roomInfo = {
           id: roomId,
           name: roomId,
           userCount,
@@ -557,12 +583,20 @@ export const useCanvasSyncFirebase = (
             room.boardState?.timestamp || 0
           )
         };
+        
+        console.log(`[Firebase] ✅ Room ${roomId} info:`, roomInfo);
+        return roomInfo;
       }).sort((a, b) => b.lastActivity - a.lastActivity);
 
       console.log(`[Firebase] 📋 Found ${rooms.length} rooms:`, rooms);
       return rooms;
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Firebase] ❌ Error getting rooms:', error);
+      console.error('[Firebase] ❌ Error details:', {
+        message: error?.message || 'Unknown error',
+        stack: error?.stack || 'No stack trace',
+        code: error?.code || 'No error code'
+      });
       return [];
     }
   }, [database]);
