@@ -100,7 +100,7 @@ export function SyncRoomManager({
   const getUserDisplayName = (user: any) => {
     if (user.nickname) return user.nickname;
     if (user.ipAddress) return `PC ${user.ipAddress}`;
-    return `Client ${user.clientId?.slice(-8) || 'Unknown'}`;
+    return `Client ${user.clientId || 'Unknown'}`;
   };
 
   // Ordina utenti per tempo di connessione (prima connessi prima)
@@ -395,7 +395,7 @@ export function SyncRoomManager({
                                   <div style={{ fontSize: '11px', color: '#666', display: 'flex', gap: '15px' }}>
                                     <span>
                                       <i className="fa-solid fa-fingerprint" style={{ marginRight: '4px' }} />
-                                      ID: {(user.clientId || user.id || 'unknown').slice(-8)}
+                                      ID: {user.clientId || user.id || 'unknown'}
                                     </span>
                                     {user.ipAddress && (
                                       <span>
