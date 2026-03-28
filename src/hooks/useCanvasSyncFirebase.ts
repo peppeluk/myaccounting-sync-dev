@@ -171,6 +171,9 @@ export const useCanvasSyncFirebase = (
     }
 
     console.log('[Firebase] Joining room:', roomId);
+    console.log('[Firebase] 🔍 Client ID before join:', clientIdRef.current);
+    console.log('[Firebase] 🔍 Client ID type:', typeof clientIdRef.current);
+    console.log('[Firebase] 🔍 Client ID length:', clientIdRef.current?.length);
     
     // Pulisci listeners precedenti
     clearListeners();
@@ -188,6 +191,9 @@ export const useCanvasSyncFirebase = (
     // Aggiungi utente alla stanza
     const newUserRef = push(usersRef);
     const userKey = newUserRef.key;
+    console.log('[Firebase] 🔍 Generated user key:', userKey);
+    console.log('[Firebase] 🔍 Setting user with client ID:', clientIdRef.current);
+    
     set(newUserRef, {
       clientId: clientIdRef.current,
       connectedAt: serverTimestamp(),
@@ -209,8 +215,17 @@ export const useCanvasSyncFirebase = (
       const users = snapshot.val() || {};
       const now = Date.now();
       
+      console.log('[Firebase] 👥 Users in room:', Object.keys(users).length);
+      console.log('[Firebase] 🔍 Users data:', users);
+      
       // Rimuovi utenti inattivi da più di 15 secondi
       Object.entries(users).forEach(([key, user]: [string, any]) => {
+        console.log(`[Firebase] 👤 User ${key}:`, {
+          clientId: user.clientId,
+          connectedAt: user.connectedAt,
+          lastSeen: user.lastSeen
+        });
+        
         const lastSeen = user.lastSeen || user.connectedAt;
         if (lastSeen && (now - lastSeen) > 15000) {
           console.log(`[Firebase] 🧹 Removing inactive user: ${key}`);
@@ -283,9 +298,9 @@ export const useCanvasSyncFirebase = (
                   console.log('[Firebase] 🔧 RECONSTRUCT OBJECTS CALLED with', objectsData.length, 'objects');
                   console.log('[Firebase] 🔍 Objects types:', objectsData.map(obj => obj.type));
                   
-                  // Timeout per evitare loop infiniti
+                  // Timeout per evitare loop infiniti - aumentato a 30 secondi
                   const timeoutPromise = new Promise<any[]>((_, reject) => {
-                    setTimeout(() => reject(new Error('RECONSTRUCT TIMEOUT')), 10000);
+                    setTimeout(() => reject(new Error('RECONSTRUCT TIMEOUT')), 30000);
                   });
                   
                   try {
