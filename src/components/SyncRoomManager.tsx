@@ -4,6 +4,7 @@ type SyncRoomManagerProps = {
   isConnected: boolean;
   currentRoom: string | null;
   onJoinRoom: (roomId: string, nickname?: string, ipAddress?: string) => void;
+  onLeaveRoom?: () => void; // Nuova prop per uscire dalla stanza
   onDisconnectUser?: (userKey: string) => void;
   onDisconnectAll?: () => void;
   onClearRoom?: () => void;
@@ -19,6 +20,7 @@ export function SyncRoomManager({
   isConnected,
   currentRoom,
   onJoinRoom,
+  onLeaveRoom,
   onDisconnectUser,
   onDisconnectAll,
   onClearRoom,
@@ -181,15 +183,44 @@ export function SyncRoomManager({
                 {connectedUsers}
               </div>
               <div style={{ 
-                color: '#007bff', 
-                fontSize: '10px',
-                fontWeight: '500',
-                maxWidth: '100px',
-                overflow: 'hidden', 
-                textOverflow: 'ellipsis', 
-                whiteSpace: 'nowrap' 
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
               }}>
-                {currentRoom}
+                <div style={{ 
+                  color: '#007bff', 
+                  fontSize: '10px',
+                  fontWeight: '500',
+                  maxWidth: '80px',
+                  overflow: 'hidden', 
+                  textOverflow: 'ellipsis', 
+                  whiteSpace: 'nowrap' 
+                }}>
+                  {currentRoom}
+                </div>
+                <button
+                  onClick={() => {
+                    if (onLeaveRoom) {
+                      onLeaveRoom();
+                    }
+                  }}
+                  style={{
+                    background: '#dc3545',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '2px 6px',
+                    fontSize: '9px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '2px'
+                  }}
+                  title={`Esci dalla stanza "${currentRoom}"`}
+                >
+                  <i className="fa-solid fa-right-from-bracket" />
+                  Esci
+                </button>
               </div>
             </div>
           ) : (

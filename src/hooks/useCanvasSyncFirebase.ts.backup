@@ -1,0 +1,1397 @@
+// ============================================================
+// useCanvasSyncFirebase.ts
+// Hook per sincronizzazione canvas tramite Firebase Realtime Database
+// ============================================================
+
+import { useEffect, useRef, useState, useCallback, type RefObject } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getDatabase, 
+  ref, 
+  set, 
+  push, 
+  onValue, 
+  onChildAdded, 
+  serverTimestamp, 
+  remove,
+  update,
+  onDisconnect
+} from 'firebase/database';
+import * as fabric from 'fabric';
+
+// Configurazione Firebase
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+};
+
+// Variabile per database Firebase (inizializzata su richiesta)
+let database: any = null;
+let app: any = null;
+
+// Inizializza Firebase solo quando necessario
+const initializeFirebase = () => {
+  if (!database && firebaseConfig.apiKey) {
+    try {
+      app = initializeApp(firebaseConfig);
+      database = getDatabase(app);
+      console.log('[Firebase] App initialized successfully');
+      return true;
+    } catch (error) {
+      console.error('[Firebase] Initialization error:', error);
+      return false;
+    }
+  }
+  return !!database;
+};
+
+export type ConnectedUser = {
+  clientId: string;
+  nickname?: string;
+  ipAddress?: string;
+  connectedAt: number;
+};
+
+export type SyncState = {
+  isConnected: boolean;
+  currentRoom: string | null;
+  connectedUsers: ConnectedUser[];
+};
+
+export type JournalSyncState = {
+  entries: any[];
+  selectedProfileId?: string;
+  isJournalOpen?: boolean;
+  isCalculatorOpen?: boolean;
+  calculatorDisplay?: string;
+  selectedField?: {
+    entryId: string;
+    field: string;
+  } | null;
+  calculatorTarget?: {
+    entryId: string;
+    field: string;
+  } | null;
+  journalScroll?: {
+    top: number;
+    left: number;
+  } | null;
+};
+
+export type BoardSyncState = {
+  pageCount: number;
+  currentPageIndex: number;
+  scrollTop: number;
+  scrollLeft: number;
+};
+
+export type JournalSyncHandlers = {
+  getState: () => JournalSyncState;
+  onState: (state: JournalSyncState) => void;
+  onAction: (action: any) => void;
+};
+
+export type BoardSyncHandlers = {
+  getState: () => BoardSyncState;
+  onState: (state: BoardSyncState) => void;
+  onAction: (action: any) => void;
+};
+
+export type SyncActions = {
+  joinRoom: (roomId: string) => void;
+  leaveRoom: () => void;
+  sendJournalAction: (action: any) => void;
+  sendJournalState: (state: JournalSyncState) => void;
+  sendBoardState: (state: BoardSyncState) => void;
+  sendCanvasFullState: () => void;
+};
+
+export type SyncRefs = {
+  wsRef: any;
+  clientIdRef: React.MutableRefObject<string>;
+  currentRoomRef: React.MutableRefObject<string | null>;
+};
+
+/**
+ * Hook per sincronizzazione canvas in tempo reale con Firebase Realtime Database
+ * 
+ * @param canvasRef - Ref al canvas Fabric.js da sincronizzare
+ * @param journalSync - Handler per sincronizzazione journal
+ * @param boardSync - Handler per sincronizzazione board
+ * @returns Stato connessione e azioni per gestire le stanze
+ */
+export const useCanvasSyncFirebase = (
+  canvasRef: RefObject<any>,
+  journalSync?: JournalSyncHandlers,
+  boardSyncHandlers?: BoardSyncHandlers
+) => {
+  const [isConnected, setIsConnected] = useState(false);
+  const [currentRoom, setCurrentRoom] = useState<string | null>(null);
+  const [connectedUsers, setConnectedUsers] = useState(0);
+  const [connectedUsersList, setConnectedUsersList] = useState<any[]>([]);
+  
+  const clientIdRef = useRef<string>('');
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isJoiningRef = useRef<boolean>(false); // 🚨 PREVENZIONE DOUBLE JOIN
+  const isReconstructingRef = useRef<boolean>(false); // 🚨 PREVENZIONE RICOSTRUZIONI CONCORRENTI
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null); // 🚨 DEBOUNCE PREVIENE MULTIPLI CHIAMATE
+  const lastReconstructTimeRef = useRef<number>(0); // 🚨 PREVIENE RICOSTRUZIONI TROPPO VICINE
+  
+  // 🚨 LISTENER MANAGEMENT - previene accumulo listener duplicati
+  const unsubUsersRef = useRef<(() => void) | null>(null);
+  const unsubCanvasStatesRef = useRef<(() => void) | null>(null);
+  const unsubJournalRef = useRef<(() => void) | null>(null);
+  const unsubJournalStateRef = useRef<(() => void) | null>(null);
+  const unsubBoardStateRef = useRef<(() => void) | null>(null);
+  const unsubBoardRef = useRef<(() => void) | null>(null);
+  
+  // 🚨 DEBUG COUNTER
+  let listenerCount = 0;
+  
+  // Inizializza clientId se non presente
+  useEffect(() => {
+    if (!clientIdRef.current) {
+      // 🚨 EVITA DUPLICATI - usa crypto.randomUUID() se disponibile, altrimenti timestamp più preciso
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).slice(2, 8);
+      const extraRandom = Math.random().toString(36).slice(8, 14);
+      
+      // Prova a usare crypto.randomUUID() per massima unicità
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        try {
+          const uuid = crypto.randomUUID().slice(0, 8);
+          clientIdRef.current = `client-${timestamp}-${uuid}-${random}`;
+        } catch (e) {
+          // Fallback a timestamp più preciso
+          clientIdRef.current = `client-${timestamp}-${random}-${extraRandom}`;
+        }
+      } else {
+        // Fallback per browser più vecchi
+        clientIdRef.current = `client-${timestamp}-${random}-${extraRandom}`;
+      }
+      
+      console.log('[Firebase] 🆔 Generated unique client ID:', clientIdRef.current);
+    }
+  }, []);
+  
+  // Flag per prevenire loop infinito di sincronizzazione
+  const isApplyingRemoteDataRef = useRef<boolean>(false);
+
+  const currentRoomRef = useRef<string | null>(null);
+  const listenersRef = useRef<any[]>([]);
+
+  // Pulisci listeners quando cambia stanza
+  const clearListeners = useCallback(() => {
+    console.log('[Firebase] Clearing all listeners...');
+    
+    // CLEANUP DEBOUNCE TIMER
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+      console.log('[Firebase] Cleared debounce timer');
+    }
+    
+    // RESET MUTEX E TIMERS
+    isReconstructingRef.current = false;
+    lastReconstructTimeRef.current = 0;
+    console.log('[Firebase] Reset reconstruction mutex and timer');
+    
+    listenersRef.current.forEach(unsub => {
+      if (typeof unsub === 'function') {
+        unsub();
+      }
+    });
+    listenersRef.current = [];
+    
+    // CLEANUP UNSUB REFS
+    if (unsubUsersRef.current) {
+      unsubUsersRef.current();
+      unsubUsersRef.current = null;
+    }
+    if (unsubCanvasStatesRef.current) {
+      unsubCanvasStatesRef.current();
+      unsubCanvasStatesRef.current = null;
+    }
+    if (unsubJournalRef.current) {
+      unsubJournalRef.current();
+      unsubJournalRef.current = null;
+    }
+    if (unsubJournalStateRef.current) {
+      unsubJournalStateRef.current();
+      unsubJournalStateRef.current = null;
+    }
+    if (unsubBoardStateRef.current) {
+      unsubBoardStateRef.current();
+      unsubBoardStateRef.current = null;
+    }
+    if (unsubBoardRef.current) {
+      unsubBoardRef.current();
+      unsubBoardRef.current = null;
+    }
+    
+    console.log('[Firebase] All listeners cleared');
+  }, []);
+
+  // Unisciti alla stanza
+  const joinRoom = useCallback((roomId: string) => {
+    // PREVENZIONE DOUBLE JOIN
+    if (isJoiningRef.current) {
+      console.log('[Firebase] Already joining - skipping duplicate join');
+      return;
+    }
+    
+    // Inizializza Firebase solo quando necessario
+    if (!initializeFirebase()) {
+      console.warn('[Firebase] Cannot join room - Firebase initialization failed');
+      return;
+    }
+
+    console.log('[Firebase] Joining room:', roomId);
+    console.log('[Firebase] 🔍 Client ID before join:', clientIdRef.current);
+    console.log('[Firebase] 🔍 Client ID type:', typeof clientIdRef.current);
+    console.log('[Firebase] 🔍 Client ID length:', clientIdRef.current?.length);
+    
+    // 🚨 IMPOSTA FLAG JOIN
+    isJoiningRef.current = true;
+
+    try {
+    
+    // Pulisci listeners precedenti
+    clearListeners();
+    
+    // Aggiorna stato
+    setCurrentRoom(roomId);
+    currentRoomRef.current = roomId;
+    setIsConnected(true);
+
+    // Riferimenti ai nodi Firebase
+    const usersRef = ref(database, `rooms/${roomId}/users`);
+    const journalDataRef = ref(database, `rooms/${roomId}/journal`);
+    const boardDataRef = ref(database, `rooms/${roomId}/board`);
+
+    // Aggiungi utente alla stanza
+    const newUserRef = push(usersRef);
+    const userKey = newUserRef.key;
+    console.log('[Firebase] 🔍 Generated user key:', userKey);
+    console.log('[Firebase] 🔍 Setting user with client ID:', clientIdRef.current);
+    
+    // 🚨 CONTROLLA DUPLICATI - verifica che non ci siano già client con lo stesso ID
+    const checkForDuplicates = (snapshot: any) => {
+      const existingUsers = snapshot.val() || {};
+      const duplicateKeys = Object.keys(existingUsers).filter((key: string) => 
+        existingUsers[key].clientId === clientIdRef.current && key !== userKey
+      );
+      
+      if (duplicateKeys.length > 0) {
+        console.warn('[Firebase] 🚨 DUPLICATE CLIENT ID DETECTED! Removing old connections...');
+        duplicateKeys.forEach((duplicateKey: string) => {
+          const duplicateRef = ref(database, `rooms/${roomId}/users/${duplicateKey}`);
+          remove(duplicateRef);
+        });
+      }
+    };
+    
+    // Controlla duplicati una tantum
+    onValue(usersRef, checkForDuplicates, { onlyOnce: true });
+    
+    set(newUserRef, {
+      clientId: clientIdRef.current,
+      connectedAt: serverTimestamp(),
+      lastSeen: serverTimestamp()
+    });
+
+    // 🚨 ONDISCONNECT CLEANUP - rimuovi automaticamente canvasState se disconnesso
+    const canvasStateRef = ref(database, `rooms/${roomId}/canvasStates/${clientIdRef.current}`);
+    onDisconnect(canvasStateRef).remove();
+    console.log('[Firebase] 🔗 Registered onDisconnect for canvas state cleanup');
+
+    // Heartbeat per mantenere connessione attiva
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (currentRoomRef.current && userKey) {
+        const userRef = ref(database, `rooms/${currentRoomRef.current}/users/${userKey}`);
+        update(userRef, {
+          lastSeen: serverTimestamp()
+        });
+      }
+    }, 10000); // Heartbeat ogni 10 secondi
+
+    // Ascolta utenti connessi
+    // 🚨 PREVIENE ACCUMULO - unsubscribe prima di registrare nuovo listener
+    if (unsubUsersRef.current) unsubUsersRef.current();
+    
+    console.log('[LISTENER COUNT] users listeners registered:', ++listenerCount);
+    
+    unsubUsersRef.current = onValue(usersRef, (snapshot) => {
+      const users = snapshot.val() || {};
+      const now = Date.now();
+      
+      console.log('[Firebase] 👥 Users in room:', Object.keys(users).length);
+      console.log('[Firebase] 🔍 Users data:', users);
+      
+      // Rimuovi utenti inattivi da più di 15 secondi
+      Object.entries(users).forEach(([key, user]: [string, any]) => {
+        console.log(`[Firebase] 👤 User ${key}:`, {
+          clientId: user.clientId,
+          connectedAt: user.connectedAt,
+          lastSeen: user.lastSeen
+        });
+        
+        const lastSeen = user.lastSeen || user.connectedAt;
+        if (lastSeen && (now - lastSeen) > 15000) {
+          console.log(`[Firebase] 🧹 Removing inactive user: ${key}`);
+          remove(ref(database, `rooms/${roomId}/users/${key}`));
+        }
+      });
+      
+      const usersList = Object.values(users).map((user: any) => ({
+        ...user,
+        connectedAt: user.connectedAt || Date.now()
+      }));
+      setConnectedUsers(usersList.length);
+      setConnectedUsersList(usersList); // Salva la lista completa
+      
+      // Cleanup dati vecchi ogni 30 secondi
+      cleanupOldData(roomId);
+    });
+
+    // Ascolta stati canvas di tutti i client (leggero e veloce)
+    // 🚨 PREVIENE ACCUMULO - unsubscribe prima di registrare nuovo listener
+    if (unsubCanvasStatesRef.current) unsubCanvasStatesRef.current();
+    
+    console.log('[LISTENER COUNT] canvasStates listeners registered:', ++listenerCount);
+    console.log('🔧🔧🔧 CREATING CANVAS STATE LISTENER... 🔧🔧🔧');
+    
+    unsubCanvasStatesRef.current = onValue(ref(database, `rooms/${roomId}/canvasStates`), (snapshot) => {
+      console.log('🚨🚨🚨 CANVAS STATES LISTENER TRIGGERED! 🚨🚨🚨');
+      const allStates = snapshot.val();
+      if (!allStates) return;
+      
+      // 🚨 FILTRA SOLO CLIENT ATTIVI - ottieni lista utenti correnti SENZA creare nuovo listener
+      // Usa gli utenti già disponibili dal usersListener invece di creare un nuovo onValue
+      const activeUsers = connectedUsersList || [];
+      const activeClientIds = activeUsers.map((user: any) => user.clientId);
+      
+      console.log('[Firebase] 👥 Active client IDs:', activeClientIds);
+      console.log('[Firebase] 📥 All canvas states:', Object.keys(allStates));
+        
+        // 🚨 FILTRA SOLO SNAPSHOT REMOTI DI CLIENT ATTIVI
+        const remoteStates = Object.entries(allStates).filter(([clientId]: [string, any]) => {
+          return clientId !== clientIdRef.current && activeClientIds.includes(clientId);
+        });
+        
+        console.log('[Firebase] 🔍 Remote states from active clients:', remoteStates.length);
+        
+        if (remoteStates.length === 0) {
+          console.log('[Firebase] ⏸️ No remote states from active clients - skipping');
+          return;
+        }
+        
+        // 🚨 PRENDI SNAPSHOT PIÙ RECENTE TRA QUELLI REMOTI
+        const mostRecentState = remoteStates.reduce((latest: any, [clientId, stateData]: [string, any]) => {
+          if (!latest || (stateData.timestamp && stateData.timestamp > latest.timestamp)) {
+            return { clientId, ...stateData };
+          }
+          return latest;
+        }, null);
+        
+        if (!mostRecentState) {
+          console.log('[Firebase] ⏸️ No valid recent state found');
+          return;
+        }
+        
+        console.log('[Firebase] 🎯 Applying most recent remote state from:', mostRecentState.clientId);
+        console.log('[Firebase] 📥 RAW canvas snapshot received:', mostRecentState);
+        console.log('[Firebase] 🔍 Canvas ref available:', !!canvasRef.current);
+        console.log('[Firebase] 🔍 Client ID check:', mostRecentState.clientId, 'vs', clientIdRef.current);
+        console.log('[Firebase] 🔍 State data:', !!mostRecentState.state);
+        console.log('[Firebase] 🔍 State objects:', mostRecentState.state?.objects?.length || 0);
+        console.log('[Firebase] 🔍 Fabric available:', !!fabric);
+        
+        // Log completo per debug
+        console.log('[Firebase] 🔍 COMPLETE CANVAS STATE ANALYSIS:');
+        console.log('  - mostRecentState.clientId:', mostRecentState.clientId);
+        console.log('  - clientIdRef.current:', clientIdRef.current);
+        console.log('  - mostRecentState.clientId type:', typeof mostRecentState.clientId);
+        console.log('  - clientIdRef.current type:', typeof clientIdRef.current);
+        console.log('  - mostRecentState.clientId === clientIdRef.current:', mostRecentState.clientId === clientIdRef.current);
+        console.log('  - mostRecentState.clientId !== clientIdRef.current:', mostRecentState.clientId !== clientIdRef.current);
+        console.log('  - canvasRef.current:', !!canvasRef.current);
+        console.log('  - mostRecentState.state:', !!mostRecentState.state);
+        console.log('  - mostRecentState.state.objects:', mostRecentState.state?.objects?.length || 0);
+        
+        if (canvasRef.current && mostRecentState.state) {
+          console.log('[Firebase] 🎯 Conditions met - applying remote canvas state');
+          // Imposta flag per prevenire loop infinito
+          isApplyingRemoteDataRef.current = true;
+          
+          // Applica dati al canvas in modo ottimizzato
+          try {
+            if (fabric && mostRecentState.state.objects && Array.isArray(mostRecentState.state.objects)) {
+              console.log('[Firebase] 🎨 Starting canvas reconstruction with', mostRecentState.state.objects.length, 'objects');
+              // Disattiva temporaneamente eventi canvas per prevenire loop
+              const originalEvents = canvasRef.current.__eventListeners;
+              canvasRef.current.__eventListeners = {};
+              
+              // Usa requestAnimationFrame per non bloccare il thread principale
+              requestAnimationFrame(() => {
+                try {
+                  // Pulisci canvas in modo efficiente
+                  canvasRef.current.clear();
+                  
+                  // Ricostruisci oggetti con debounce per prevenire chiamate multiple
+                  const reconstructWithDebounce = (objectsData: any[]) => {
+                    return new Promise<any[]>((resolve) => {
+                      const now = Date.now();
+                      const timeSinceLastReconstruct = now - lastReconstructTimeRef.current;
+                      
+                      // 🚨 BLOCCO TEMPO FORTE - previene ricostruzioni troppo vicine
+                      if (timeSinceLastReconstruct < 1000) { // 1 secondo minimo
+                        console.log('[Firebase] ⏭️ Too soon since last reconstruct, skipping');
+                        resolve([]);
+                        return;
+                      }
+                      
+                      // 🚨 DEBOUNCE - cancella timer precedente
+                      if (debounceTimerRef.current) {
+                        clearTimeout(debounceTimerRef.current);
+                        console.log('[Firebase] ⏭️ Cleared previous debounce timer');
+                      }
+                      
+                      // 🚨 IMPOSTA NUOVO TIMER - 500ms per dare tempo a Fabric
+                      debounceTimerRef.current = setTimeout(async () => {
+                        console.log('[Firebase] 🔧 DEBOUNCED RECONSTRUCT STARTING with', objectsData.length, 'objects');
+                        lastReconstructTimeRef.current = Date.now();
+                        
+                        try {
+                          const result = await reconstructObjects(objectsData);
+                          resolve(result);
+                        } catch (error) {
+                          console.error('[Firebase] 💥 Debounced reconstruct error:', error);
+                          resolve([]);
+                        } finally {
+                          debounceTimerRef.current = null;
+                        }
+                      }, 500); // 500ms debounce
+                    });
+                  };
+                  
+                  // Ricostruisci oggetti con logica migliorata
+                  const reconstructObjects = async (objectsData: any[]): Promise<any[]> => {
+                    console.log('[Firebase] 🔧 RECONSTRUCT OBJECTS CALLED with', objectsData.length, 'objects');
+                    console.log('[Firebase] 🔍 Objects types:', objectsData.map(obj => obj.type));
+                    
+                    // 🚨 DEBOUNCE - cancella timer precedente
+                    if (debounceTimerRef.current) {
+                      clearTimeout(debounceTimerRef.current);
+                      console.log('[Firebase] ⏭️ Cleared previous debounce timer');
+                    }
+                    
+                    // 🚨 MUTEX - previene ricostruzioni concorrenti
+                    if (isReconstructingRef.current) {
+                      console.log('[Firebase] ⏭️ Reconstruction already in progress, skipping');
+                      return [];
+                    }
+                    isReconstructingRef.current = true;
+                    
+                    // 🚨 TIMEOUT CON CANCELLAZIONE - usa Promise.race con timeout cancellabile
+                    const timeoutId = setTimeout(() => {
+                      console.warn('[Firebase] ⏰ Reconstruction timeout reached');
+                    }, 5000); // 5 secondi timeout
+                    
+                    try {
+                      const result = await Promise.race([
+                        reconstructInternal(objectsData).finally(() => {
+                          clearTimeout(timeoutId);
+                        }),
+                        new Promise<never>((_, reject) => {
+                          setTimeout(() => reject(new Error('RECONSTRUCT TIMEOUT')), 5000);
+                        })
+                      ]);
+                      return result;
+                    } catch (error) {
+                      console.error('[Firebase] 💥 RECONSTRUCT TIMEOUT OR ERROR:', error);
+                      throw error;
+                    } finally {
+                      // 🚨 RESET MUTEX - sempre eseguito sia successo che errore
+                      isReconstructingRef.current = false;
+                      clearTimeout(timeoutId);
+                    }
+                  };
+                
+                const reconstructInternal = async (objectsData: any[]) => {
+                  console.log('[Firebase] 🔧 RECONSTRUCT INTERNAL STARTED');
+                  // Separa immagini da altri oggetti
+                  const imageObjects = objectsData.filter(obj => obj.type === 'image');
+                  const otherObjects = objectsData.filter(obj => obj.type !== 'image');
+                  
+                  console.log('[Firebase] 🔍 Images:', imageObjects.length, 'Others:', otherObjects.length);
+                  const reconstructed: any[] = [];
+                  
+                  // Ricostruisci immagini separatamente
+                  for (const objData of imageObjects) {
+                    console.log('[Firebase] 🔧 Processing image:', objData.src ? 'has src' : 'no src');
+                    try {
+                      // 🚨 SALTA IMMAGINI PROBLEMATICHE
+                      if (objData.src && objData.src !== '[large-image-data]' && objData.src !== '[no-src]') {
+                        const img = await new Promise((resolve, reject) => {
+                          const image = new Image();
+                          image.crossOrigin = objData.crossOrigin || 'anonymous';
+                          image.onload = () => {
+                            try {
+                              const fabricImg = new fabric.Image(image, {
+                                left: objData.left,
+                                top: objData.top,
+                                width: objData.width,
+                                height: objData.height,
+                                selectable: objData.selectable,
+                                evented: objData.evented,
+                                opacity: objData.opacity
+                              });
+                              
+                              // Ripristina dimensioni originali se presenti
+                              (fabricImg as any).originalWidth = objData.originalWidth;
+                              (fabricImg as any).originalHeight = objData.originalHeight;
+                              
+                              resolve(fabricImg);
+                            } catch (e) {
+                              reject(e);
+                            }
+                          };
+                          image.onerror = reject;
+                          image.src = objData.src;
+                        });
+                        reconstructed.push(img);
+                      } else if (objData.src === '[large-image-data]') {
+                        console.warn('[Firebase] ⚠️ Skipping large image data - not synced');
+                      } else if (objData.src === '[no-src]') {
+                        console.warn('[Firebase] ⚠️ Skipping image with no src - not synced');
+                      }
+                    } catch (error) {
+                      console.error('[Firebase] Error reconstructing image:', objData, error);
+                    }
+                  }
+                  
+                  // Ricostruisci altri oggetti con fabric.util.enlivenObjects (Fabric v6 usa Promise)
+                  if (otherObjects.length > 0) {
+                    try {
+                      console.log('[Firebase] 🔧 Starting enlivenObjects for', otherObjects.length, 'objects');
+                      console.log('[Firebase] 🔍 First object sample:', JSON.stringify(otherObjects[0], null, 2));
+                      
+                      // 🚨 FABRIC V6: enlivenObjects restituisce Promise, firma corretta - TIMEOUT AUMENTATO
+                      const enlivenedObjects = await Promise.race([
+                        fabric.util.enlivenObjects(otherObjects),
+                        new Promise<any[]>((resolve) => 
+                          setTimeout(() => {
+                            console.warn('[Firebase] ⏰ enlivenObjects timeout (10s) - using fallback');
+                            resolve([]);
+                          }, 10000) // 10 secondi invece di 5
+                        )
+                      ]);
+                      
+                      console.log('[Firebase] ✅ enlivenObjects completed with', enlivenedObjects.length, 'objects');
+                      reconstructed.push(...enlivenedObjects);
+                    } catch (error) {
+                      console.error('[Firebase] Error enlivening objects:', error);
+                      // Non lanciare errore, continua con oggetti ricostruiti parzialmente
+                    }
+                  }
+                  
+                  return reconstructed;
+                resolve([]);
+                return;
+              }
+                      
+              // � DEBOUNCE - cancella timer precedente
+              if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+                console.log('[Firebase] ⏭️ Cleared previous debounce timer');
+              }
+                      
+              // 🚨 IMPOSTA NUOVO TIMER - 500ms per dare tempo a Fabric
+              debounceTimerRef.current = setTimeout(async () => {
+                console.log('[Firebase] � DEBOUNCED RECONSTRUCT STARTING with', objectsData.length, 'objects');
+                lastReconstructTimeRef.current = Date.now();
+                        
+                try {
+                  const result = await reconstructObjects(objectsData);
+                  resolve(result);
+                } catch (error) {
+                  console.error('[Firebase] � Debounced reconstruct error:', error);
+                  resolve([]);
+                } finally {
+                  debounceTimerRef.current = null;
+                }
+              }, 500); // 500ms debounce
+            });
+          };
+                  
+          // Ricostruisci oggetti con logica migliorata
+          const reconstructObjects = async (objectsData: any[]): Promise<any[]> => {
+            console.log('[Firebase] 🔧 RECONSTRUCT OBJECTS CALLED with', objectsData.length, 'objects');
+            console.log('[Firebase] 🔍 Objects types:', objectsData.map(obj => obj.type));
+                    
+            // 🚨 DEBOUNCE - cancella timer precedente
+            if (debounceTimerRef.current) {
+              clearTimeout(debounceTimerRef.current);
+              console.log('[Firebase] ⏭️ Cleared previous debounce timer');
+            }
+                    
+            // 🚨 MUTEX - previene ricostruzioni concorrenti
+            if (isReconstructingRef.current) {
+              console.log('[Firebase] ⏭️ Reconstruction already in progress, skipping');
+              return [];
+            }
+            isReconstructingRef.current = true;
+                    
+            // 🚨 TIMEOUT CON CANCELLAZIONE - usa Promise.race con timeout cancellabile
+            const timeoutId = setTimeout(() => {
+              console.warn('[Firebase] ⏰ Reconstruction timeout reached');
+            }, 5000); // 5 secondi timeout
+                    
+            try {
+              const result = await Promise.race([
+                reconstructInternal(objectsData).finally(() => {
+                  clearTimeout(timeoutId);
+                }),
+                new Promise<never>((_, reject) => {
+                  setTimeout(() => reject(new Error('RECONSTRUCT TIMEOUT')), 5000);
+                })
+              ]);
+              return result;
+            } catch (error) {
+              console.error('[Firebase] 💥 RECONSTRUCT TIMEOUT OR ERROR:', error);
+              throw error;
+            } finally {
+              // 🚨 RESET MUTEX - sempre eseguito sia successo che errore
+              isReconstructingRef.current = false;
+              clearTimeout(timeoutId);
+            }
+          };
+                
+        const reconstructInternal = async (objectsData: any[]) => {
+          console.log('[Firebase] � RECONSTRUCT INTERNAL STARTED');
+          // Separa immagini da altri oggetti
+          const imageObjects = objectsData.filter(obj => obj.type === 'image');
+          const otherObjects = objectsData.filter(obj => obj.type !== 'image');
+                  
+          console.log('[Firebase] � Images:', imageObjects.length, 'Others:', otherObjects.length);
+          const reconstructed: any[] = [];
+                  
+          // Ricostruisci immagini separatamente
+          for (const objData of imageObjects) {
+            console.log('[Firebase] 🔧 Processing image:', objData.src ? 'has src' : 'no src');
+            try {
+              // 🚨 SALTA IMMAGINI PROBLEMATICHE
+              if (objData.src && objData.src !== '[large-image-data]' && objData.src !== '[no-src]') {
+                const img = await new Promise((resolve, reject) => {
+                  const image = new Image();
+                  image.crossOrigin = objData.crossOrigin || 'anonymous';
+                  image.onload = () => {
+                    try {
+                      const fabricImg = new fabric.Image(image, {
+                        left: objData.left,
+                        top: objData.top,
+                        width: objData.width,
+                        height: objData.height,
+                        selectable: objData.selectable,
+                        evented: objData.evented,
+                        opacity: objData.opacity
+                      });
+                      
+                      // Ripristina dimensioni originali se presenti
+                      (fabricImg as any).originalWidth = objData.originalWidth;
+                      (fabricImg as any).originalHeight = objData.originalHeight;
+                      
+                      resolve(fabricImg);
+                    } catch (e) {
+                      reject(e);
+                    }
+                  };
+                  image.onerror = reject;
+                  image.src = objData.src;
+                });
+                reconstructed.push(img);
+              } else if (objData.src === '[large-image-data]') {
+                console.warn('[Firebase] ⚠️ Skipping large image data - not synced');
+              } else if (objData.src === '[no-src]') {
+                console.warn('[Firebase] ⚠️ Skipping image with no src - not synced');
+              }
+            } catch (error) {
+              console.error('[Firebase] Error reconstructing image:', objData, error);
+            }
+          }
+                  
+          // Ricostruisci altri oggetti con fabric.util.enlivenObjects (Fabric v6 usa Promise)
+          if (otherObjects.length > 0) {
+            try {
+              console.log('[Firebase] 🔧 Starting enlivenObjects for', otherObjects.length, 'objects');
+              console.log('[Firebase] 🔍 First object sample:', JSON.stringify(otherObjects[0], null, 2));
+                      
+              // 🚨 FABRIC V6: enlivenObjects restituisce Promise, firma corretta - TIMEOUT AUMENTATO
+              const enlivenedObjects = await Promise.race([
+                fabric.util.enlivenObjects(otherObjects),
+                new Promise<any[]>((resolve) => 
+                  setTimeout(() => {
+                    console.warn('[Firebase] ⏰ enlivenObjects timeout (10s) - using fallback');
+                    resolve([]);
+                  }, 10000) // 10 secondi invece di 5
+                )
+              ]);
+                      
+              console.log('[Firebase] ✅ enlivenObjects completed with', enlivenedObjects.length, 'objects');
+              reconstructed.push(...enlivenedObjects);
+            } catch (error) {
+              console.error('[Firebase] Error enlivening objects:', error);
+              // Non lanciare errore, continua con oggetti ricostruiti parzialmente
+            }
+          console.log('  - mostRecentState.state:', !!mostRecentState.state);
+          console.log('  - mostRecentState.state.objects:', mostRecentState.state?.objects?.length || 0);
+        }
+      });
+    });
+
+    // Sincronizza journal esistente all'join
+    const journalRef = ref(database, `rooms/${roomId}/journal`);
+    onValue(journalRef, (snapshot) => {
+      const journal = snapshot.val() || {};
+      console.log('[Firebase] 📚 Loading existing journal entries:', Object.keys(journal).length);
+      
+      Object.values(journal).forEach((entry: any) => {
+        if (entry.clientId !== clientIdRef.current && journalSync?.onAction) {
+          console.log('[Firebase] 🎯 Applying existing journal action:', entry.action);
+          try {
+            journalSync.onAction(entry.action);
+          } catch (error) {
+            console.error('[Firebase] 💥 Error applying existing journal action:', error);
+          }
+        }
+      });
+    }, { onlyOnce: true });
+
+    // Ascolta eventi journal
+    const journalListener = onChildAdded(journalDataRef, (snapshot) => {
+      const data = snapshot.val();
+      console.log('[Firebase] 📥 RAW journal data received:', data);
+      console.log('[Firebase] 🔍 Client ID check:', data.clientId, 'vs', clientIdRef.current);
+      console.log('[Firebase] 🔍 Journal sync available:', !!journalSync);
+      console.log('[Firebase] 🔍 Journal onAction available:', !!journalSync?.onAction);
+      
+      if (data.clientId !== clientIdRef.current && journalSync?.onAction) {
+        console.log('[Firebase] 🎯 Processing journal action:', data.action);
+        try {
+          journalSync.onAction(data.action);
+          console.log('[Firebase] ✅ Journal action applied successfully');
+        } catch (error) {
+          console.error('[Firebase] 💥 Error applying journal action:', error);
+        }
+      } else {
+        console.log('[Firebase] ⏭️ Skipping journal data - conditions not met');
+      }
+    });
+
+    // Ascolta stato journal (scroll, selezione, etc.)
+    const journalStateListener = onValue(ref(database, `rooms/${roomId}/journalState`), (snapshot) => {
+      const data = snapshot.val();
+      if (data && data.clientId !== clientIdRef.current && journalSync?.onState) {
+        console.log('[Firebase] 📥 Received journal state:', data.state);
+        try {
+          journalSync.onState(data.state);
+          console.log('[Firebase] ✅ Journal state applied successfully');
+        } catch (error) {
+          console.error('[Firebase] 💥 Error applying journal state:', error);
+        }
+      }
+    });
+
+    // Ascolta stato board (scroll, pagine, etc.)
+    const boardStateListener = onValue(ref(database, `rooms/${roomId}/boardState`), (snapshot) => {
+      const data = snapshot.val();
+      if (data && data.clientId !== clientIdRef.current && boardSyncHandlers?.onState) {
+        console.log('[Firebase] 📥 Received board state:', data.state);
+        try {
+          boardSyncHandlers.onState(data.state);
+          console.log('[Firebase] ✅ Board state applied successfully');
+        } catch (error) {
+          console.error('[Firebase] 💥 Error applying board state:', error);
+        }
+      }
+    });
+
+    // Ascolta eventi board
+    const boardListener = onChildAdded(boardDataRef, (snapshot) => {
+      const data = snapshot.val();
+      console.log('[Firebase] 📥 RAW board data received:', data);
+      console.log('[Firebase] 🔍 Client ID check:', data.clientId, 'vs', clientIdRef.current);
+      
+      if (data.clientId !== clientIdRef.current && boardSyncHandlers?.onAction) {
+        console.log('[Firebase] 🎯 Processing board action:', data.action);
+        try {
+          boardSyncHandlers.onAction(data.action);
+          console.log('[Firebase] ✅ Board action applied successfully');
+        } catch (error) {
+          console.error('[Firebase] 💥 Error applying board action:', error);
+        }
+      }
+    });
+
+    // Aggiungi tutti i listeners
+    listenersRef.current = [
+      usersListener,
+      canvasStatesListener,
+      journalListener,
+      journalStateListener,
+      boardStateListener,
+      boardListener
+    ];
+
+    // Cleanup su unmount
+    const handleUnload = () => {
+      clearListeners();
+      leaveRoom();
+    };
+
+    window.addEventListener('beforeunload', handleUnload);
+
+    // 🚨 RESET JOIN FLAG - join completato con successo
+    isJoiningRef.current = false;
+    console.log('[Firebase] ✅ Join completed successfully');
+
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload);
+      handleUnload();
+    };
+    } catch (error) {
+      console.error('[Firebase] 💥 Error during join:', error);
+      // 🚨 RESET JOIN FLAG IN CASO DI ERRORE
+      isJoiningRef.current = false;
+      clearListeners();
+      setCurrentRoom(null);
+      currentRoomRef.current = null;
+      setIsConnected(false);
+    }
+  }, [database, clearListeners]);
+
+  // Cleanup dati vecchi per risparmiare storage e download
+  const cleanupOldData = useCallback((roomId: string) => {
+    if (!database) return;
+    
+    const now = Date.now();
+    const maxAge = 5 * 60 * 1000; // 5 minuti max retention
+    
+    // Cleanup canvas history (non più usata ma per compatibilità)
+    const canvasRef = ref(database, `rooms/${roomId}/canvas`);
+    onValue(canvasRef, (snapshot) => {
+      const events = snapshot.val() || {};
+      Object.entries(events).forEach(([key, event]: [string, any]) => {
+        const timestamp = event.timestamp || 0;
+        if (now - timestamp > maxAge) {
+          console.log(`[Firebase] 🗑️ Removing old canvas event: ${key}`);
+          remove(ref(database, `rooms/${roomId}/canvas/${key}`));
+        }
+      });
+    }, { onlyOnce: true });
+    
+    // Cleanup journal events
+    const journalRef = ref(database, `rooms/${roomId}/journal`);
+    onValue(journalRef, (snapshot) => {
+      const events = snapshot.val() || {};
+      Object.entries(events).forEach(([key, event]: [string, any]) => {
+        const timestamp = event.timestamp || 0;
+        if (now - timestamp > maxAge) {
+          console.log(`[Firebase] 🗑️ Removing old journal event: ${key}`);
+          remove(ref(database, `rooms/${roomId}/journal/${key}`));
+        }
+      });
+    }, { onlyOnce: true });
+    
+    // Cleanup canvasStates vecchi (se esistono)
+    const canvasStatesRef = ref(database, `rooms/${roomId}/canvasStates`);
+    onValue(canvasStatesRef, (snapshot) => {
+      const states = snapshot.val() || {};
+      Object.entries(states).forEach(([clientId, state]: [string, any]) => {
+        const timestamp = state.timestamp || 0;
+        if (now - timestamp > maxAge) {
+          console.log(`[Firebase] 🗑️ Removing old canvas state: ${clientId}`);
+          remove(ref(database, `rooms/${roomId}/canvasStates/${clientId}`));
+        }
+      });
+    }, { onlyOnce: true });
+  }, [database]);
+
+  // Disconnetti utente specifico
+  const disconnectUser = useCallback((userKey: string) => {
+    if (!database || !currentRoomRef.current) {
+      console.warn('[Firebase] Cannot disconnect user - not connected');
+      return;
+    }
+
+    const userRef = ref(database, `rooms/${currentRoomRef.current}/users/${userKey}`);
+    remove(userRef)
+      .then(() => {
+        console.log(`[Firebase] ✅ Disconnected user: ${userKey}`);
+      })
+      .catch((error) => {
+        console.error('[Firebase] ❌ Error disconnecting user:', error);
+      });
+  }, [database]);
+
+  // Disconnetti tutti gli altri utenti
+  const disconnectAllOtherUsers = useCallback(() => {
+    if (!database || !currentRoomRef.current) {
+      console.warn('[Firebase] Cannot disconnect users - not connected');
+      return;
+    }
+
+    const usersRef = ref(database, `rooms/${currentRoomRef.current}/users`);
+    onValue(usersRef, (snapshot) => {
+      const users = snapshot.val() || {};
+      
+      Object.entries(users).forEach(([key, user]: [string, any]) => {
+        // Non disconnettere se stesso
+        if (user.clientId !== clientIdRef.current) {
+          const userRef = ref(database, `rooms/${currentRoomRef.current}/users/${key}`);
+          remove(userRef);
+        }
+      });
+      
+      console.log('[Firebase] ✅ Disconnected all other users');
+    }, { onlyOnce: true });
+  }, [database]);
+
+  // Svuota completamente la stanza
+  const clearRoom = useCallback(() => {
+    if (!database || !currentRoomRef.current) {
+      console.warn('[Firebase] Cannot clear room - not connected');
+      return;
+    }
+
+    const roomId = currentRoomRef.current;
+    console.log(`[Firebase] 🧹 Clearing room: ${roomId}`);
+    
+    try {
+      // Rimuovi tutti gli utenti
+      const usersRef = ref(database, `rooms/${roomId}/users`);
+      remove(usersRef).then(() => {
+        console.log('[Firebase] ✅ Cleared all users');
+      });
+
+      // Rimuovi canvas states
+      const canvasStatesRef = ref(database, `rooms/${roomId}/canvasStates`);
+      remove(canvasStatesRef).then(() => {
+        console.log('[Firebase] ✅ Cleared canvas states');
+      });
+
+      // Rimuovi canvas history
+      const canvasRef = ref(database, `rooms/${roomId}/canvas`);
+      remove(canvasRef).then(() => {
+        console.log('[Firebase] ✅ Cleared canvas history');
+      });
+
+      // Rimuovi journal
+      const journalRef = ref(database, `rooms/${roomId}/journal`);
+      remove(journalRef).then(() => {
+        console.log('[Firebase] ✅ Cleared journal');
+      });
+
+      // Rimuovi journal state
+      const journalStateRef = ref(database, `rooms/${roomId}/journalState`);
+      remove(journalStateRef).then(() => {
+        console.log('[Firebase] ✅ Cleared journal state');
+      });
+
+      // Rimuovi board
+      const boardRef = ref(database, `rooms/${roomId}/board`);
+      remove(boardRef).then(() => {
+        console.log('[Firebase] ✅ Cleared board');
+      });
+
+      // Rimuovi board state
+      const boardStateRef = ref(database, `rooms/${roomId}/boardState`);
+      remove(boardStateRef).then(() => {
+        console.log('[Firebase] ✅ Cleared board state');
+      });
+
+      console.log(`[Firebase] 🧹 Room ${roomId} cleared successfully`);
+    } catch (error) {
+      console.error('[Firebase] ❌ Error clearing room:', error);
+    }
+  }, [database]);
+
+  // Ottieni lista di tutte le stanze
+  const getAllRooms = useCallback(async () => {
+    console.log('[Firebase] 🔍 getAllRooms called');
+    
+    // Inizializza Firebase se necessario
+    if (!database && !initializeFirebase()) {
+      console.error('[Firebase] ❌ Cannot get rooms - Firebase initialization failed');
+      return [];
+    }
+
+    console.log('[Firebase] ✅ Firebase initialized, database available');
+    console.log('[Firebase] 🔧 Firebase config:', {
+      apiKey: firebaseConfig.apiKey ? '✅ Set' : '❌ Missing',
+      databaseURL: firebaseConfig.databaseURL || '❌ Missing',
+      authDomain: firebaseConfig.authDomain || '❌ Missing',
+      projectId: firebaseConfig.projectId || '❌ Missing'
+    });
+
+    try {
+      console.log('[Firebase] 📡 Reading from /rooms path...');
+      const roomsRef = ref(database, 'rooms');
+      
+      const snapshot = await new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Firebase read timeout after 10 seconds'));
+        }, 10000);
+        
+        onValue(roomsRef, (snapshot) => {
+          clearTimeout(timeout);
+          console.log('[Firebase] 📦 Received snapshot from Firebase');
+          resolve(snapshot);
+        }, { onlyOnce: true });
+      });
+      
+      console.log('[Firebase] 📊 Snapshot exists:', snapshot.exists());
+      console.log('[Firebase] 📊 Snapshot val():', snapshot.val());
+      
+      const roomsData = snapshot.val() || {};
+      console.log('[Firebase] 🗂️ Rooms data type:', typeof roomsData);
+      console.log('[Firebase] 🗂️ Rooms data keys:', Object.keys(roomsData));
+      
+      const rooms = Object.keys(roomsData).map(roomId => {
+        const room = roomsData[roomId];
+        console.log(`[Firebase] 🏠 Processing room ${roomId}:`, room);
+        
+        const users = room.users || {};
+        const userCount = Object.keys(users).length;
+        
+        const roomInfo = {
+          id: roomId,
+          name: roomId,
+          userCount,
+          users: Object.values(users),
+          hasCanvas: !!(room.canvasState || room.canvas),
+          hasJournal: !!(room.journalState || room.journal),
+          hasBoard: !!(room.boardState || room.board),
+          lastActivity: Math.max(
+            ...Object.values(users).map((user: any) => user.lastSeen || user.connectedAt || 0),
+            room.canvasState?.timestamp || 0,
+            room.journalState?.timestamp || 0,
+            room.boardState?.timestamp || 0
+          )
+        };
+        
+        console.log(`[Firebase] ✅ Room ${roomId} info:`, roomInfo);
+        return roomInfo;
+      }).sort((a, b) => b.lastActivity - a.lastActivity);
+
+      console.log(`[Firebase] 📋 Found ${rooms.length} rooms:`, rooms);
+      return rooms;
+    } catch (error: any) {
+      console.error('[Firebase] ❌ Error getting rooms:', error);
+      console.error('[Firebase] ❌ Error details:', {
+        message: error?.message || 'Unknown error',
+        stack: error?.stack || 'No stack trace',
+        code: error?.code || 'No error code'
+      });
+      return [];
+    }
+  }, [database]);
+
+  // Elimina una stanza specifica
+  const deleteRoom = useCallback(async (roomId: string) => {
+    // Inizializza Firebase se necessario
+    if (!database && !initializeFirebase()) {
+      console.warn('[Firebase] Cannot delete room - Firebase initialization failed');
+      return false;
+    }
+
+    try {
+      console.log(`[Firebase] 🗑️ Deleting room: ${roomId}`);
+      const roomRef = ref(database, `rooms/${roomId}`);
+      await remove(roomRef);
+      console.log(`[Firebase] ✅ Room ${roomId} deleted successfully`);
+      return true;
+    } catch (error) {
+      console.error(`[Firebase] ❌ Error deleting room ${roomId}:`, error);
+      return false;
+    }
+  }, [database]);
+
+  // Elimina tutte le stanze
+  const deleteAllRooms = useCallback(async () => {
+    // Inizializza Firebase se necessario
+    if (!database && !initializeFirebase()) {
+      console.warn('[Firebase] Cannot delete rooms - Firebase initialization failed');
+      return false;
+    }
+
+    try {
+      console.log('[Firebase] 🧹 Deleting ALL rooms');
+      const roomsRef = ref(database, 'rooms');
+      await remove(roomsRef);
+      console.log('[Firebase] ✅ All rooms deleted successfully');
+      return true;
+    } catch (error) {
+      console.error('[Firebase] ❌ Error deleting all rooms:', error);
+      return false;
+    }
+  }, [database]);
+
+  // Lascia la stanza
+  const leaveRoom = useCallback(() => {
+    if (!database || !currentRoomRef.current) {
+      return;
+    }
+
+    console.log('[Firebase] Leaving room:', currentRoomRef.current);
+    
+    // Pulisci listeners
+    clearListeners();
+    
+    // Ferma heartbeat
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+    
+    // Rimuovi utente dalla stanza
+    const usersRef = ref(database, `rooms/${currentRoomRef.current}/users`);
+    onValue(usersRef, (snapshot) => {
+      const users = snapshot.val() || {};
+      Object.entries(users).forEach(([key, user]: [string, any]) => {
+        if (user.clientId === clientIdRef.current) {
+          remove(ref(database, `rooms/${currentRoomRef.current}/users/${key}`));
+        }
+      });
+    }, { onlyOnce: true });
+
+    // 🚨 CLEANUP CANVAS STATE - rimuovi il proprio canvasState
+    const canvasStateRef = ref(database, `rooms/${currentRoomRef.current}/canvasStates/${clientIdRef.current}`);
+    remove(canvasStateRef).then(() => {
+      console.log('[Firebase] 🧹 Removed own canvas state on leave');
+    }).catch((error) => {
+      console.error('[Firebase] ❌ Error removing canvas state:', error);
+    });
+
+    // Resetta stato
+    setCurrentRoom(null);
+    currentRoomRef.current = null;
+    setConnectedUsers(0);
+    setIsConnected(false);
+  }, [database, clearListeners]);
+
+  // Invia azione journal
+  const sendJournalAction = useCallback((action: any) => {
+    // BLOCCA COMPLETAMENTE SYNC SE NON CONNESSI
+    if (!isConnected) {
+      console.log('[Firebase] ⏸️ Journal sync paused - not connected to any room');
+      return;
+    }
+    
+    if (!database || !currentRoomRef.current) {
+      console.log('[Firebase] Cannot send journal action - not connected');
+      return;
+    }
+
+    const journalRef = ref(database, `rooms/${currentRoomRef.current}/journal`);
+    push(journalRef, {
+      clientId: clientIdRef.current,
+      action,
+      timestamp: serverTimestamp()
+    });
+
+    console.log('[Firebase] Sent journal action:', action);
+  }, [database, isConnected]);
+
+  // Invia stato journal
+  const sendJournalState = useCallback((state: JournalSyncState) => {
+    // BLOCCA COMPLETAMENTE SYNC SE NON CONNESSI
+    if (!isConnected) {
+      console.log('[Firebase] ⏸️ Journal state sync paused - not connected to any room');
+      return;
+    }
+    
+    if (!database || !currentRoomRef.current) {
+      console.log('[Firebase] Cannot send journal state - not connected');
+      return;
+    }
+
+    const journalStateRef = ref(database, `rooms/${currentRoomRef.current}/journalState`);
+    set(journalStateRef, {
+      clientId: clientIdRef.current,
+      state,
+      timestamp: serverTimestamp()
+    });
+
+    console.log('[Firebase] Sent journal state:', state);
+  }, [database, isConnected]);
+
+  // Invia stato board
+  const sendBoardState = useCallback((state: BoardSyncState) => {
+    // BLOCCA COMPLETAMENTE SYNC SE NON CONNESSI
+    if (!isConnected) {
+      console.log('[Firebase] ⏸️ Board state sync paused - not connected to any room');
+      return;
+    }
+    
+    if (!database || !currentRoomRef.current) {
+      console.log('[Firebase] Cannot send board state - not connected');
+      return;
+    }
+
+    const boardStateRef = ref(database, `rooms/${currentRoomRef.current}/boardState`);
+    set(boardStateRef, {
+      clientId: clientIdRef.current,
+      state,
+      timestamp: serverTimestamp()
+    });
+
+    console.log('[Firebase] Sent board state:', state);
+  }, [database, isConnected]);
+
+  // Invia stato completo canvas (snapshot invece di storia)
+  const sendCanvasFullState = useCallback(() => {
+    // Non inviare se stiamo applicando dati remoti per prevenire loop infinito
+    if (isApplyingRemoteDataRef.current) {
+      console.log('[Firebase] ⏭️ Skipping canvas send - currently applying remote data');
+      return;
+    }
+    
+    // BLOCCA COMPLETAMENTE SYNC SE NON CONNESSI
+    if (!isConnected) {
+      console.log('[Firebase] ⏸️ Sync paused - not connected to any room');
+      return;
+    }
+    
+    if (!database || !currentRoomRef.current || !canvasRef.current) {
+      console.log('[Firebase] Cannot send canvas state - not connected');
+      return;
+    }
+
+    try {
+      const canvas = canvasRef.current;
+      
+      // Estrai oggetti canvas
+      const objects = canvas.getObjects().filter((obj: any) => {
+        // Escludi solo la selezione temporanea, includi tutto il resto
+        return !obj.isType('selection');
+      });
+
+      // Sovrascrivi stato corrente invece di aggiungere alla storia
+      const canvasState = {
+        objects: objects.map((obj: any) => ({
+          type: obj.type,
+          left: obj.left,
+          top: obj.top,
+          width: obj.width,
+          height: obj.height,
+          fill: obj.fill,
+          stroke: obj.stroke,
+          strokeWidth: obj.strokeWidth,
+          strokeLineCap: obj.strokeLineCap,
+          strokeLineJoin: obj.strokeLineJoin,
+          strokeDashArray: obj.strokeDashArray,
+          opacity: obj.opacity,
+          selectable: obj.selectable,
+          evented: obj.evented,
+          // Correggi problemi specifici per tipo
+          ...(obj.type === 'path' && { 
+            path: obj.path,
+            // Assicura che i path abbiano le proprietà di disegno corrette
+            fill: obj.fill || 'transparent', // Path di default senza riempimento
+            stroke: obj.stroke || '#000000', // Path di default con bordo nero
+            strokeWidth: obj.strokeWidth || 2
+          }),
+          ...(obj.type === 'circle' && { 
+            radius: obj.radius,
+            // Correggi colore riempimento per cerchi
+            fill: obj.fill || 'transparent', // Cerchi di default senza riempimento
+            stroke: obj.stroke || '#000000' // Cerchi di default con bordo
+          }),
+          ...(obj.type === 'rect' && { rx: obj.rx, ry: obj.ry }),
+          ...(obj.type === 'text' && { 
+            text: obj.text,
+            fontSize: obj.fontSize,
+            fontFamily: obj.fontFamily,
+            textAlign: obj.textAlign,
+            originX: obj.originX,
+            originY: obj.originY
+          }),
+          ...(obj.type === 'image' && { 
+            // 🚨 EVITA DATA URL TROPPO GRANDI - limita a 1KB
+            src: (!obj.src) ? '[no-src]' : (obj.src.length > 1024) ? '[large-image-data]' : obj.src,
+            crossOrigin: obj.crossOrigin,
+            // Salva le dimensioni originali per il resize
+            originalWidth: obj.originalWidth || obj.width,
+            originalHeight: obj.originalHeight || obj.height,
+            // Salva anche il crop se presente
+            cropX: obj.cropX,
+            cropY: obj.cropY,
+            // Proprietà di filtro e trasformazione
+            filters: obj.filters?.map((f: any) => ({
+              type: f.type,
+              // Salva i parametri del filtro in base al tipo
+              ...(f.type === 'Grayscale' && {}),
+              ...(f.type === 'Sepia' && {}),
+              ...(f.type === 'Brightness' && { brightness: f.brightness }),
+              ...(f.type === 'Contrast' && { contrast: f.contrast })
+            })) || []
+          })
+        })),
+        metadata: {
+          timestamp: Date.now(),
+          clientId: clientIdRef.current,
+          objectCount: objects.length
+        }
+      };
+
+      // Salva canvas state per questo client specifico (non sovrascrivere gli altri)
+      const canvasStateRef = ref(database, `rooms/${currentRoomRef.current}/canvasStates/${clientIdRef.current}`);
+      set(canvasStateRef, {
+        clientId: clientIdRef.current,
+        state: canvasState,
+        timestamp: serverTimestamp()
+      });
+
+      console.log('[Firebase] 📤 Sent canvas snapshot with', objects.length, 'objects');
+    } catch (error) {
+      console.error('[Firebase] Error sending canvas state:', error);
+    }
+  }, [database, canvasRef, isConnected]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      clearListeners();
+      leaveRoom();
+    };
+  }, [clearListeners, leaveRoom]);
+
+  return {
+    isConnected,
+    currentRoom,
+    connectedUsers,
+    connectedUsersList,
+    joinRoom,
+    leaveRoom,
+    sendJournalAction,
+    sendJournalState,
+    sendBoardState,
+    sendCanvasFullState,
+    disconnectUser,
+    disconnectAllOtherUsers,
+    clearRoom,
+    getAllRooms,
+    deleteRoom,
+    deleteAllRooms,
+    currentRoomRef,
+    clientIdRef,
+  };
+}

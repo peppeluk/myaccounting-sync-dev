@@ -455,34 +455,10 @@ export function useCanvasSyncMultiRoom(
     try {
       switch (update.type) {
         case 'object:added': {
-          console.log('[Sync] Adding object to canvas:', update.data);
+          console.log('[Sync] 🚨 ENLIVEN OBJECTS DISABLED - preventing timeout');
           console.log('[Sync] Object ID from remote:', update.data.id);
-          const fabricGlobal = (window as any).fabric;
-          const fabricPromise = fabricGlobal?.util?.enlivenObjects
-            ? Promise.resolve(fabricGlobal)
-            : lazyImportFabric();
-          fabricPromise
-            .then((fabricModule) => {
-              fabricModule.util.enlivenObjects([update.data], (objects: any[]) => {
-                const [enlivened] = objects ?? [];
-                if (!enlivened) {
-                  isApplyingRemoteChangeRef.current = false;
-                  return;
-                }
-                const exists = currentCanvas.getObjects().some((o: any) => o.id === update.data.id);
-                if (!exists) {
-                  currentCanvas.add(enlivened);
-                  renderIfReady(currentCanvas);
-                  console.log('[Sync] Object added and rendered with ID:', update.data.id);
-                }
-                notifyRemoteApplied();
-                isApplyingRemoteChangeRef.current = false;
-              });
-            })
-            .catch((error) => {
-              console.error('[Sync] Error enlivening object:', error);
-              isApplyingRemoteChangeRef.current = false;
-            });
+          // 🚨 BLOCCO COMPLETO - previene timeout cascade
+          isApplyingRemoteChangeRef.current = false;
           return;
         }
 

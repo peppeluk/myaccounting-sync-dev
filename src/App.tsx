@@ -863,6 +863,7 @@ function App() {
   const {
     isConnected: syncIsConnected,
     joinRoom: syncJoinRoom,
+    leaveRoom: syncLeaveRoom,
     sendJournalAction,
     sendJournalState,
     sendBoardState,
@@ -6615,6 +6616,7 @@ function App() {
           isConnected={syncIsConnected}
           currentRoom={syncCurrentRoom}
           onJoinRoom={syncJoinRoom}
+          onLeaveRoom={syncLeaveRoom}
           onDisconnectUser={disconnectUser}
           onDisconnectAll={disconnectAllOtherUsers}
           onClearRoom={clearRoom}
