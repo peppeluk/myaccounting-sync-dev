@@ -55,13 +55,13 @@ export type BoardSyncHandlers = {
 };
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC6u5p5A6y3LqJ9n8m4o2p1r9s8t7u6v5w",
-  authDomain: "myaccounting-sync-dev.firebaseapp.com",
-  databaseURL: "https://myaccounting-sync-dev-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "myaccounting-sync-dev",
-  storageBucket: "myaccounting-sync-dev.appspot.com",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abcdef123456789012345678"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || process.env.REACT_APP_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || process.env.REACT_APP_FIREBASE_APP_ID
 };
 
 let database: Database | null = null;
@@ -280,8 +280,147 @@ export const useCanvasSyncFirebase = (
 
       // Applica lo stato più recente se non è del client corrente
       if (mostRecentState && mostRecentState.clientId !== clientIdRef.current) {
-        console.log('[Firebase] 🚨 RECONSTRUCTION DISABLED - preventing timeout cascade');
-        return; // 🚨 BLOCCO COMPLETO - nessuna ricostruzione
+        console.log('[Firebase] 🎯 Applying most recent remote state from:', mostRecentState.clientId);
+        console.log('[Firebase] 📥 RAW canvas snapshot received:', mostRecentState);
+        console.log('[Firebase] 🔍 Canvas ref available:', !!canvasRef.current);
+        console.log('[Firebase] 🔍 Client ID check:', mostRecentState.clientId, 'vs', clientIdRef.current);
+        console.log('[Firebase] 🔍 State data:', !!mostRecentState.state);
+        console.log('[Firebase] 🔍 State objects:', mostRecentState.state?.objects?.length);
+        console.log('[Firebase] 🔍 Fabric available:', !!fabric);
+        
+        // 🚨 CONTROLLO COMPLETO - previene ricostruzioni non necessarie
+        if (!canvasRef.current || !mostRecentState.state || !fabric) {
+          console.log('[Firebase] ⚠️ Missing required data for reconstruction, skipping');
+          return;
+        }
+        
+        console.log('[Firebase] 🔍 COMPLETE CANVAS STATE ANALYSIS:');
+        console.log('   - mostRecentState.clientId:', mostRecentState.clientId);
+        console.log('   - clientIdRef.current:', clientIdRef.current);
+        console.log('   - mostRecentState.clientId type:', typeof mostRecentState.clientId);
+        console.log('   - clientIdRef.current type:', typeof clientIdRef.current);
+        console.log('   - mostRecentState.clientId === clientIdRef.current:', mostRecentState.clientId === clientIdRef.current);
+        console.log('   - mostRecentState.clientId !== clientIdRef.current:', mostRecentState.clientId !== clientIdRef.current);
+        console.log('   - canvasRef.current:', !!canvasRef.current);
+        console.log('   - mostRecentState.state:', !!mostRecentState.state);
+        console.log('   - mostRecentState.state.objects:', mostRecentState.state.objects?.length);
+        
+        // 🚨 CONDIZIONI STRETTE - solo se tutte soddisfatte
+        if (mostRecentState.clientId !== clientIdRef.current && canvasRef.current && mostRecentState.state && mostRecentState.state.objects && Array.isArray(mostRecentState.state.objects)) {
+          console.log('[Firebase] 🎯 Conditions met - applying remote canvas state');
+          console.log('[Firebase] 🎨 Starting canvas reconstruction with', mostRecentState.state.objects.length, 'objects');
+          
+          // Imposta flag per prevenire loop infinito
+          isApplyingRemoteDataRef.current = true;
+          
+          // Applica dati al canvas in modo ottimizzato
+          try {
+            // Disattiva temporaneamente eventi canvas per prevenire loop
+            const originalEvents = canvasRef.current.__eventListeners;
+            canvasRef.current.__eventListeners = {};
+            
+            // Usa requestAnimationFrame per non bloccare il thread principale
+            requestAnimationFrame(() => {
+              try {
+                // Pulisci canvas in modo efficiente
+                canvasRef.current.clear();
+                
+                // Ricostruisci oggetti con logica migliorata
+                const reconstructObjects = async (objectsData: any[]): Promise<any[]> => {
+                  console.log('[Firebase] 🔧 RECONSTRUCT OBJECTS CALLED with', objectsData.length, 'objects');
+                  console.log('[Firebase] 🔍 Objects types:', objectsData.map(obj => obj.type));
+                  
+                  // 🚨 DEBOUNCE - cancella timer precedente
+                  if (debounceTimerRef.current) {
+                    clearTimeout(debounceTimerRef.current);
+                    console.log('[Firebase] ⏭️ Cleared previous debounce timer');
+                  }
+                  
+                  // 🚨 MUTEX - previene ricostruzioni concorrenti
+                  if (isReconstructingRef.current) {
+                    console.log('[Firebase] ⏭️ Reconstruction already in progress, skipping');
+                    return [];
+                  }
+                  isReconstructingRef.current = true;
+                  
+                  try {
+                    // 🚨 TIMEOUT CON CANCELLAZIONE - usa Promise.race con timeout cancellabile
+                    const timeoutId = setTimeout(() => {
+                      console.warn('[Firebase] ⏰ Reconstruction timeout reached');
+                    }, 5000); // 5 secondi timeout
+                    
+                    const result = await Promise.race([
+                      fabric.util.enlivenObjects(objectsData),
+                      new Promise<any[]>((resolve) => 
+                        setTimeout(() => {
+                          console.warn('[Firebase] ⏰ enlivenObjects timeout (10s) - using fallback');
+                          resolve([]);
+                        }, 10000) // 10 secondi invece di 5
+                      )
+                    ]);
+                    
+                    console.log('[Firebase] ✅ enlivenObjects completed with', result.length, 'objects');
+                    return result;
+                  } catch (error) {
+                    console.error('[Firebase] Error enlivening objects:', error);
+                    return [];
+                  } finally {
+                    // 🚨 RESET MUTEX - sempre eseguito sia successo che errore
+                    isReconstructingRef.current = false;
+                  }
+                };
+                
+                // Ricostruisci e applica oggetti
+                reconstructObjects(mostRecentState.state.objects).then((reconstructed) => {
+                  console.log('[Firebase] 🎯 Reconstructed', reconstructed.length, 'objects, applying to canvas');
+                  console.log('[Firebase] 🔍 Objects to apply:', reconstructed);
+                  
+                  // Applica oggetti al canvas
+                  reconstructed.forEach((obj, index) => {
+                    try {
+                      canvasRef.current.add(obj);
+                      console.log('[Firebase] ✅ Object', index, 'added successfully');
+                    } catch (error) {
+                      console.error('[Firebase] Error adding object', index, ':', error);
+                    }
+                  });
+                  
+                  console.log('[Firebase] 🔄 Object application loop completed');
+                  
+                  // Riabilita eventi e rendering
+                  canvasRef.current.__eventListeners = originalEvents;
+                  canvasRef.current.renderAll();
+                  console.log('[Firebase] ✅ renderAll() completed');
+                  
+                  // Resetta flag dopo un ritardo per dare tempo agli eventi di stabilizzarsi
+                  setTimeout(() => {
+                    isApplyingRemoteDataRef.current = false;
+                    console.log('[Firebase] ✅ Applied', mostRecentState.state.objects.length, 'objects from snapshot, events restored');
+                  }, 1000);
+                  
+                }).catch((error) => {
+                  console.error('[Firebase] 💥 Error during reconstruction:', error);
+                  // Ripristina eventi anche in caso di errore
+                  canvasRef.current.__eventListeners = originalEvents;
+                  isApplyingRemoteDataRef.current = false;
+                });
+                
+              } catch (error) {
+                console.error('[Firebase] 💥 Error in requestAnimationFrame:', error);
+                // Ripristina eventi anche in caso di errore
+                canvasRef.current.__eventListeners = originalEvents;
+                isApplyingRemoteDataRef.current = false;
+              }
+            });
+          } catch (error) {
+            console.error('[Firebase] Error applying remote canvas state:', error);
+            isApplyingRemoteDataRef.current = false;
+          }
+        } else {
+          console.log('[Firebase] ⏸️ Conditions not met for reconstruction, skipping');
+        }
+      } else {
+        console.log('[Firebase] ⏸️ No remote state to apply or is current client state');
       }
     });
 
