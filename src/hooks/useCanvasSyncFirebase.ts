@@ -269,6 +269,17 @@ export const useCanvasSyncFirebase = (
     unsubCanvasStatesRef.current = onValue(canvasStatesRef, (snapshot) => {
       console.log('Firebase Listener Triggered');
       
+      // **BLOCCO IMMEDIATO HASH GLOBALE** - previene TUTTI i loop infiniti PRIMA di qualsiasi elaborazione
+      const allStates = snapshot.val();
+      if (!allStates) return;
+      
+      // Calcola hash completo di tutti gli stati
+      const globalHash = JSON.stringify(allStates);
+      if (globalStateKeyRef.current === globalHash) {
+        console.log('[Firebase] **GLOBAL HASH BLOCK: Same global state - COMPLETELY BLOCKING');
+        return;
+      }
+      
       // **SICUREZZA: Reset isApplyingRemoteDataRef se bloccato da troppo tempo**
       if (isApplyingRemoteDataRef.current) {
         const timeSinceLastRemoteApply = Date.now() - (lastRemoteApplyTimeRef.current || 0);
@@ -279,15 +290,9 @@ export const useCanvasSyncFirebase = (
         }
       }
       
-      const allStates = snapshot.val();
-      if (!allStates) return;
-      
-      // **BLOCCO FIREBASE ASSOLUTO** - previene loop infiniti di Firebase
-      const firebaseKey = JSON.stringify(allStates) + '-' + Date.now();
-      if (globalStateKeyRef.current && globalStateKeyRef.current.split('-')[0] === JSON.stringify(allStates)) {
-        console.log('[Firebase] **FIREBASE BLOCK: Same data from Firebase - IGNORING');
-        return;
-      }
+      // Imposta blocco hash globale immediatamente
+      globalStateKeyRef.current = globalHash;
+      console.log('[Firebase] **GLOBAL HASH BLOCK SET for new state');
       
       // **BLOCCO FREQUENZA** - max 1 chiamata ogni 2 secondi
       const now = Date.now();
@@ -297,9 +302,7 @@ export const useCanvasSyncFirebase = (
       }
       lastReconstructTimeRef.current = now;
       
-      // Imposta blocco Firebase
-      globalStateKeyRef.current = firebaseKey;
-      console.log('[Firebase] **FIREBASE BLOCK SET for new data');
+      console.log('[Firebase] **PASSED ALL BLOCKS - Processing new state...');
       
       // 🚨 BLOCCO GLOBALE IMMEDIATO - previene esecuzioni multiple dello stesso snapshot
       const snapshotKey = JSON.stringify(allStates);
