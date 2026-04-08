@@ -5574,7 +5574,7 @@ function App() {
       return;
     }
     configureActiveTool();
-  }, [configureActiveTool, currentPageIndex, isCanvasReady]);
+  }, [currentPageIndex, isCanvasReady]);
 
   useEffect(() => {
     if (!isCanvasReady || tool !== "pen") {
