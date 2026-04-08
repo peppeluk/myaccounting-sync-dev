@@ -879,7 +879,8 @@ function App() {
     connectedUsersList: syncConnectedUsersList,
     currentRoomRef: syncCurrentRoomRef,
     clientIdRef: syncClientIdRef,
-    isApplyingRemoteDataRef
+    isApplyingRemoteDataRef,
+    lastRemoteApplyTimeRef
   } = useCanvasSyncFirebase(
     syncCanvasRef,
     journalSyncHandlers,
@@ -2432,12 +2433,20 @@ function App() {
   }, [buildArchivePreviewImagesSyncFallback, buildCurrentDocumentSnapshot, flushPendingDocumentSaveNow, setActiveArchiveDocumentId]);
 
   const scheduleCanvasFullSync = useCallback(() => {
-    console.log('🚀 [SYNC] scheduleCanvasFullSync called');
+    console.log('** [SYNC] scheduleCanvasFullSync called');
     
-    // 🚨 BLOCCO SYNC durante ricostruzione Firebase per prevenire loop
+    // ** BLOCCO SYNC durante ricostruzione Firebase per prevenire loop
     if (isApplyingRemoteDataRef.current) {
-      console.log('🚫 [SYNC] Skipping - Firebase is applying remote data');
-      return;
+      console.log('** [SYNC] Skipping - Firebase is applying remote data');
+      
+      // ** CONTROLLO DI SICUREZZA - resetta flag se bloccato per più di 5 secondi
+      const timeSinceLastRemoteApply = Date.now() - (lastRemoteApplyTimeRef.current || 0);
+      if (timeSinceLastRemoteApply > 5000) {
+        console.warn('** [SYNC] isApplyingRemoteDataRef stuck for', timeSinceLastRemoteApply, 'ms - forcing reset');
+        isApplyingRemoteDataRef.current = false;
+      } else {
+        return;
+      }
     }
     
     if (syncFullStateTimeoutRef.current !== null) {

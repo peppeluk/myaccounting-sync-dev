@@ -141,6 +141,7 @@ export const useCanvasSyncFirebase = (
 
   // Flag per prevenire loop infinito di sincronizzazione
   const isApplyingRemoteDataRef = useRef<boolean>(false);
+  const lastRemoteApplyTimeRef = useRef<number>(0); // ** Traccia ultimo apply remoto
   const currentRoomRef = useRef<string | null>(null);
   const listenersRef = useRef<any[]>([]);
 
@@ -342,6 +343,7 @@ export const useCanvasSyncFirebase = (
           
           // Imposta flag per prevenire loop infinito
           isApplyingRemoteDataRef.current = true;
+          lastRemoteApplyTimeRef.current = Date.now(); // ** Traccia tempo apply remoto
           
           // Applica dati al canvas in modo ottimizzato
           try {
@@ -585,6 +587,7 @@ export const useCanvasSyncFirebase = (
     // Ref per compatibilità
     currentRoomRef,
     clientIdRef,
-    isApplyingRemoteDataRef
+    isApplyingRemoteDataRef,
+    lastRemoteApplyTimeRef // ** Espongo tracking tempo remoto
   };
 };
