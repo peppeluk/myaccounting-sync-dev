@@ -1861,17 +1861,17 @@ button:disabled {
 .mobile-menu {
   display: none;
   position: absolute;
-  top: 100%;
+  bottom: 100%;
   left: 0;
   right: 0;
   background: #ffffff;
   border: 1px solid #d5dce7;
   border-radius: 8px;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 -12px 24px rgba(0, 0, 0, 0.16);
   z-index: 300;
   max-height: 400px;
   overflow-y: auto;
-  transform: translateY(-100%);
+  transform: translateY(100%);
   transition: transform 0.3s ease-in-out;
   opacity: 0;
   pointer-events: none;
