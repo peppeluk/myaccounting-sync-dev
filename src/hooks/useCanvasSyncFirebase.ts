@@ -531,8 +531,20 @@ export const useCanvasSyncFirebase = (
     console.log('[Firebase] 🔍 Current room:', !!currentRoomRef.current);
     console.log('[Firebase] 🔍 isApplyingRemoteDataRef:', isApplyingRemoteDataRef.current);
     
-    if (!canvasRef.current || !database || !currentRoomRef.current || isApplyingRemoteDataRef.current) {
-      console.log('[Firebase] ❌ saveCanvasState blocked - missing requirements or applying remote data');
+    // ** CONTROLLO DI SICUREZZA - resetta flag se bloccato per più di 5 secondi
+    if (isApplyingRemoteDataRef.current) {
+      const timeSinceLastRemoteApply = Date.now() - (lastRemoteApplyTimeRef.current || 0);
+      if (timeSinceLastRemoteApply > 5000) {
+        console.warn('[Firebase] ⚠️ saveCanvasState: isApplyingRemoteDataRef stuck for', timeSinceLastRemoteApply, 'ms - forcing reset');
+        isApplyingRemoteDataRef.current = false;
+      } else {
+        console.log('[Firebase] ❌ saveCanvasState blocked - currently applying remote data');
+        return;
+      }
+    }
+    
+    if (!canvasRef.current || !database || !currentRoomRef.current) {
+      console.log('[Firebase] ❌ saveCanvasState blocked - missing requirements');
       return;
     }
 
