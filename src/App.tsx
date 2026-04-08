@@ -2675,7 +2675,16 @@ function App() {
     toolHandlersRef.current = {};
   }, [getCanvasByPageId, setCanvasPanObjectInteractivity]);
 
+  // Add ref to prevent rapid repeated executions
+  const lastConfigureTimeRef = useRef(0);
+  
   const configureActiveTool = useCallback(() => {
+    const now = Date.now();
+    if (now - lastConfigureTimeRef.current < 100) {
+      return; // Skip if called too recently (less than 100ms)
+    }
+    lastConfigureTimeRef.current = now;
+    
     const pageId = getCurrentPageId();
     const canvas = getCanvasByPageId(pageId);
     const fabricModule = fabricModuleRef.current;
@@ -2691,7 +2700,6 @@ function App() {
     detachToolHandlers(pageId);
     activeCanvasPageIdRef.current = pageId;
     if (syncCanvasRef.current !== canvas) {
-      console.log('[App] setSyncCanvas from configureActiveTool:', (canvas as any)?.lowerCanvasEl?.id);
       syncCanvasRef.current = canvas;
     }
     for (const mappedCanvas of fabricCanvasMapRef.current.values()) {
@@ -6619,11 +6627,7 @@ function App() {
         {/* Menu Mobile Button */}
         <button
           className="mobile-menu-toggle"
-          onClick={() => {
-            console.log('Mobile menu clicked - isMobileMenuOpen:', isMobileMenuOpen);
-            setIsMobileMenuOpen(!isMobileMenuOpen);
-            console.log('Mobile menu new state:', !isMobileMenuOpen);
-          }}
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           aria-label="Menu"
           type="button"
         >
