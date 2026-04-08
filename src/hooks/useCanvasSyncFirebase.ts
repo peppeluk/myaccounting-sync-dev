@@ -258,6 +258,17 @@ export const useCanvasSyncFirebase = (
     
     unsubCanvasStatesRef.current = onValue(canvasStatesRef, (snapshot) => {
       console.log('Firebase Listener Triggered');
+      
+      // **SICUREZZA: Reset isApplyingRemoteDataRef se bloccato da troppo tempo**
+      if (isApplyingRemoteDataRef.current) {
+        const timeSinceLastRemoteApply = Date.now() - (lastRemoteApplyTimeRef.current || 0);
+        console.log('[Firebase] **SAFETY CHECK: isApplyingRemoteDataRef stuck for', timeSinceLastRemoteApply, 'ms');
+        if (timeSinceLastRemoteApply > 3000) { // 3 secondi invece di 5
+          console.warn('[Firebase] **SAFETY RESET: Forcing isApplyingRemoteDataRef to false');
+          isApplyingRemoteDataRef.current = false;
+        }
+      }
+      
       const allStates = snapshot.val();
       if (!allStates) return;
       
@@ -485,11 +496,12 @@ export const useCanvasSyncFirebase = (
                   canvasRef.current.renderAll();
                   console.log('[Firebase] ✅ renderAll() completed');
                   
-                  // Reset completo di tutti i blocchi per permettere nuove chiamate
+                  // **RESET COMPLETO DI TUTTI I BLOCCHI** - previene client bloccati
                   globalStateKeyRef.current = '';
                   globalProcessingHashRef.current = '';
                   isProcessingRef.current = false;
-                  console.log('[Firebase] **ALL BLOCKS RESET - Firebase calls allowed again');
+                  isApplyingRemoteDataRef.current = false; // **IMPORTANTE: Reset anche questo flag**
+                  console.log('[Firebase] **ALL BLOCKS RESET - All clients can now save/transmit');
                 });
                 
               } catch (error) {
