@@ -62,7 +62,14 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000
   },
   esbuild: {
-    target: 'es2020'
+    target: 'es2020',
+    tsconfigRaw: {
+      compilerOptions: {
+        noEmitOnError: false,
+        noImplicitAny: false,
+        strict: false
+      }
+    }
   },
   optimizeDeps: {
     exclude: ['fabric', 'tesseract.js', 'jspdf', 'mathjs']
