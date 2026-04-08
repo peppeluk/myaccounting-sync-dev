@@ -538,6 +538,7 @@ export const useCanvasSyncFirebase = (
     disconnectAllOtherUsers: () => {},
     // Ref per compatibilità
     currentRoomRef,
-    clientIdRef
+    clientIdRef,
+    isApplyingRemoteDataRef
   };
 };

@@ -878,7 +878,8 @@ function App() {
     connectedUsers: syncConnectedUsers,
     connectedUsersList: syncConnectedUsersList,
     currentRoomRef: syncCurrentRoomRef,
-    clientIdRef: syncClientIdRef
+    clientIdRef: syncClientIdRef,
+    isApplyingRemoteDataRef
   } = useCanvasSyncFirebase(
     syncCanvasRef,
     journalSyncHandlers,
@@ -2432,6 +2433,13 @@ function App() {
 
   const scheduleCanvasFullSync = useCallback(() => {
     console.log('🚀 [SYNC] scheduleCanvasFullSync called');
+    
+    // 🚨 BLOCCO SYNC durante ricostruzione Firebase per prevenire loop
+    if (isApplyingRemoteDataRef.current) {
+      console.log('🚫 [SYNC] Skipping - Firebase is applying remote data');
+      return;
+    }
+    
     if (syncFullStateTimeoutRef.current !== null) {
       window.clearTimeout(syncFullStateTimeoutRef.current);
     }
@@ -2476,6 +2484,13 @@ function App() {
       console.log('🚫 [SYNC] Skipping - isRestoringRef is true');
       return;
     }
+    
+    // 🚨 BLOCCO SYNC durante ricostruzione Firebase per prevenire loop
+    if (isApplyingRemoteDataRef.current) {
+      console.log('🚫 [SYNC] Skipping - Firebase is applying remote data');
+      return;
+    }
+    
     // 🚫 BLOCCA SYNC durante applicazione stato remoto per evitare loop infinito
     console.log('🔍 [DEBUG] Canvas sync state:', {
       isConnected: syncIsConnected,
