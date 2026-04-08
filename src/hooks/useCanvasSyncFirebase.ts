@@ -144,6 +144,7 @@ export const useCanvasSyncFirebase = (
   const lastRemoteApplyTimeRef = useRef<number>(0); // ** Traccia ultimo apply remoto
   const currentRoomRef = useRef<string | null>(null);
   const globalStateKeyRef = useRef<string>(''); // ** BLOCCO GLOBALE per prevenire applicazioni simultanee
+  const globalProcessingHashRef = useRef<string>(''); // ** BLOCCO HASH per prevenire applicazioni duplicate
   const listenersRef = useRef<any[]>([]);
 
   // Pulisci listeners quando cambia stanza
@@ -293,32 +294,47 @@ export const useCanvasSyncFirebase = (
 
       // Applica lo stato più recente se non è del client corrente
       if (mostRecentState && mostRecentState.clientId !== clientIdRef.current) {
-        // 🚨 BLOCCO IMMEDIATO - previene esecuzioni multiple
+        // BLOCCO HASH UNIVERSALE - previene applicazioni duplicate in assoluto
+        const stateHash = `${mostRecentState.clientId}-${mostRecentState.state?.timestamp || 0}-${mostRecentState.state?.objects?.length || 0}`;
+        if (globalProcessingHashRef.current === stateHash) {
+          console.log('[Firebase] **HASH BLOCK: Same state already processed globally - BLOCKING');
+          console.log('[Firebase] **Hash:', stateHash);
+          return;
+        }
+        
+        // Imposta blocco hash immediatamente
+        globalProcessingHashRef.current = stateHash;
+        console.log('[Firebase] **HASH BLOCK SET for state:', stateHash);
+        
+        // BLOCCO IMMEDIATO - previene esecuzioni multiple
         if (isProcessingRef.current) {
-          console.log('[Firebase] ⏸️ Already processing - skipping');
+          console.log('[Firebase] **PROCESSING BLOCK: Already processing - BLOCKING');
+          globalProcessingHashRef.current = ''; // Reset per permettere altri stati
           return;
         }
         
         // Controlla se stiamo già processando o se è passato troppo poco tempo dall'ultimo sync
         const now = Date.now();
         if (now - lastReconstructTimeRef.current < 500) {
-          console.log('[Firebase] Throttling sync - too soon since last reconstruction');
-          isProcessingRef.current = false; // 🚨 RESET FLAG
+          console.log('[Firebase] **THROTTLE BLOCK: Too soon since last reconstruction - BLOCKING');
+          isProcessingRef.current = false; // RESET FLAG
+          globalProcessingHashRef.current = ''; // Reset per permettere altri stati
           return;
         }
         
-        // 🚨 IMPOSTA FLAG PROCESSING IMMEDIATAMENTE
+        // IMPOSTA FLAG PROCESSING IMMEDIATAMENTE
         isProcessingRef.current = true;
-        console.log('[Firebase] 🔒 Processing flag set');
+        console.log('[Firebase] **PROCESSING FLAG SET');
         
         // PREVENI RICOSTRUZIONI DUPLICATE - controlla se abbiamo già processato questo stato
         const stateKey = `${mostRecentState.clientId}-${mostRecentState.state?.timestamp || 'no-timestamp'}-${mostRecentState.state?.objects?.length || 0}`;
-        console.log('[Firebase] Generated state key:', stateKey);
-        console.log('[Firebase] Last processed state:', lastProcessedStateRef.current);
+        console.log('[Firebase] **State key:', stateKey);
+        console.log('[Firebase] **Last processed state:', lastProcessedStateRef.current);
         
         if (lastProcessedStateRef.current === stateKey) {
-          console.log('[Firebase] Skipping duplicate state:', stateKey);
-          isProcessingRef.current = false; // 🚨 RESET FLAG
+          console.log('[Firebase] **DUPLICATE BLOCK: State already processed - BLOCKING');
+          isProcessingRef.current = false; // RESET FLAG
+          globalProcessingHashRef.current = ''; // Reset per permettere altri stati
           return;
         }
         
@@ -462,6 +478,10 @@ export const useCanvasSyncFirebase = (
                     // 🚨 RESET BLOCCO GLOBALE - permette nuovi stati
                     globalStateKeyRef.current = '';
                     console.log('[Firebase] 🔓 GLOBAL BLOCK RESET - new states can be applied');
+                    
+                    // 🚨 RESET BLOCCO HASH - permette nuovi stati
+                    globalProcessingHashRef.current = '';
+                    console.log('[Firebase] 🔓 HASH BLOCK RESET - new states can be applied');
                   }, 200);
                 });
                 
