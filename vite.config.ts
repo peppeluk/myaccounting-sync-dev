@@ -61,6 +61,9 @@ export default defineConfig({
     },
     chunkSizeWarningLimit: 1000
   },
+  esbuild: {
+    target: 'es2020'
+  },
   optimizeDeps: {
     exclude: ['fabric', 'tesseract.js', 'jspdf', 'mathjs']
   },
