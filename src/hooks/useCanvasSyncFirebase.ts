@@ -328,13 +328,16 @@ export const useCanvasSyncFirebase = (
         console.log('[Firebase] 🔍 COMPLETE CANVAS STATE ANALYSIS:');
         console.log('   - mostRecentState.clientId:', mostRecentState.clientId);
         console.log('   - clientIdRef.current:', clientIdRef.current);
-        console.log('   - mostRecentState.clientId type:', typeof mostRecentState.clientId);
-        console.log('   - clientIdRef.current type:', typeof clientIdRef.current);
         console.log('   - mostRecentState.clientId === clientIdRef.current:', mostRecentState.clientId === clientIdRef.current);
         console.log('   - mostRecentState.clientId !== clientIdRef.current:', mostRecentState.clientId !== clientIdRef.current);
-        console.log('   - canvasRef.current:', !!canvasRef.current);
-        console.log('   - mostRecentState.state:', !!mostRecentState.state);
-        console.log('   - mostRecentState.state.objects:', mostRecentState.state.objects?.length);
+        
+        // 🚨 CRITICAL: Previeni loop infinito - non applicare mai il proprio stato
+        if (mostRecentState.clientId === clientIdRef.current) {
+          console.log('[Firebase] 🚫 CRITICAL: Skipping own state to prevent infinite loop!');
+          console.log('[Firebase] 🚫 This client would apply its own state as "remote" - BLOCKED');
+          isProcessingRef.current = false;
+          return;
+        }
         
         // 🚨 CONDIZIONI STRETTE - solo se tutte soddisfatte
         if (mostRecentState.clientId !== clientIdRef.current && canvasRef.current && mostRecentState.state && mostRecentState.state.objects && Array.isArray(mostRecentState.state.objects)) {
