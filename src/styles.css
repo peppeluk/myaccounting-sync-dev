@@ -1905,7 +1905,7 @@ button:disabled {
     padding: 8px;
   }
   
-  .bottom-toolbar .icon-button:not(.mobile-menu-toggle) {
+  .bottom-toolbar .icon-button:not(.mobile-menu-toggle):not(.mobile-menu .icon-button) {
     display: none;
   }
   
