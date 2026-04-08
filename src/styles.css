@@ -1868,7 +1868,7 @@ button:disabled {
   border: 1px solid #d5dce7;
   border-radius: 8px;
   box-shadow: 0 -12px 24px rgba(0, 0, 0, 0.16);
-  z-index: 300;
+  z-index: 9999;
   max-height: 400px;
   overflow-y: auto;
   transform: translateY(100%);
