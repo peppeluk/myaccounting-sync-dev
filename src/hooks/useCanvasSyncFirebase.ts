@@ -260,6 +260,15 @@ export const useCanvasSyncFirebase = (
       const allStates = snapshot.val();
       if (!allStates) return;
       
+      // 🚨 BLOCCO GLOBALE IMMEDIATO - previene esecuzioni multiple dello stesso snapshot
+      const snapshotKey = JSON.stringify(allStates);
+      if (globalStateKeyRef.current === snapshotKey) {
+        console.log('[Firebase] 🚫 GLOBAL SNAPSHOT BLOCK: Same snapshot already processing - SKIPPING');
+        return;
+      }
+      globalStateKeyRef.current = snapshotKey;
+      console.log('[Firebase] 🔒 GLOBAL SNAPSHOT BLOCK SET for snapshot hash');
+      
       // 🚨 FILTRA SOLO CLIENT ATTIVI - usa stato invece di nuovo listener
       const activeUsers = connectedUsersList || [];
       const activeClientIds = activeUsers.map((user: any) => user.clientId);
@@ -443,9 +452,17 @@ export const useCanvasSyncFirebase = (
                   
                   // Resetta flag dopo un ritardo per dare tempo agli eventi di stabilizzarsi
                   setTimeout(() => {
-                  // Ripristina eventi anche in caso di errore
-                  canvasRef.current.__eventListeners = originalEvents;
-                  isApplyingRemoteDataRef.current = false;
+                    // Ripristina eventi anche in caso di errore
+                    canvasRef.current.__eventListeners = originalEvents;
+                    isApplyingRemoteDataRef.current = false;
+                    
+                    // 🚨 AGGIORNA last processed state per prevenire duplicati
+                    lastProcessedStateRef.current = stateKey;
+                    
+                    // 🚨 RESET BLOCCO GLOBALE - permette nuovi stati
+                    globalStateKeyRef.current = '';
+                    console.log('[Firebase] 🔓 GLOBAL BLOCK RESET - new states can be applied');
+                  }, 200);
                 });
                 
               } catch (error) {
@@ -463,8 +480,12 @@ export const useCanvasSyncFirebase = (
           console.log('[Firebase] ⏸️ Conditions not met for reconstruction, skipping');
         }
       } else {
-        console.log('[Firebase] ⏸️ No remote state to apply or is current client state');
-      }
+          console.log('[Firebase] ⏸️ No remote state to apply or is current client state');
+        }
+        
+        // 🚨 RESET BLOCCO SNAPSHOT - permette nuovi snapshot
+        globalStateKeyRef.current = '';
+        console.log('[Firebase] 🔓 GLOBAL SNAPSHOT BLOCK RESET - new snapshots allowed');
     });
 
     // 🚨 JOURNAL LISTENER CON UNSUBSCRIBE
