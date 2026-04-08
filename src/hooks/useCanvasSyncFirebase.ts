@@ -240,14 +240,24 @@ export const useCanvasSyncFirebase = (
     
     unsubUsersRef.current = onValue(usersRef, (snapshot) => {
       const users = snapshot.val() || {};
+      console.log('[Firebase] **DEBUG: Raw users data from Firebase:', users);
+      
       const activeUsers = Object.values(users).filter((user: any) => 
         user && user.isOnline && Date.now() - user.lastSeen < 30000
       );
       
+      console.log('[Firebase] **DEBUG: Active users filtered:', activeUsers);
+      console.log('[Firebase] **DEBUG: Active users clientId check:', activeUsers.map(u => ({ 
+        clientId: u?.clientId, 
+        isOnline: u?.isOnline, 
+        lastSeen: u?.lastSeen 
+      })));
+      
       setConnectedUsers(activeUsers.length);
       setConnectedUsersList(activeUsers);
       
-      console.log('[Firebase] 👥 Active users:', activeUsers.length);
+      console.log('[Firebase] **DEBUG: Connected users list set:', activeUsers.length);
+      console.log('[Firebase] **DEBUG: Connected users list content:', connectedUsersList);
     });
 
     // 🚨 CANVAS STATES LISTENER CON UNSUBSCRIBE - SENZA LISTENER ANNIDATO
@@ -539,11 +549,18 @@ export const useCanvasSyncFirebase = (
 
     // Registra presenza utente
     const userRef = ref(database, `rooms/${roomId}/users/${clientIdRef.current}`);
-    set(userRef, {
+    const userData = {
       clientId: clientIdRef.current,
       lastSeen: serverTimestamp(),
       isOnline: true
-    });
+    };
+    
+    console.log('[Firebase] **DEBUG: Saving user data to Firebase:');
+    console.log('  - User path:', `rooms/${roomId}/users/${clientIdRef.current}`);
+    console.log('  - User data:', userData);
+    console.log('  - clientIdRef.current:', clientIdRef.current);
+    
+    set(userRef, userData);
 
     // Imposta disconnessione automatica
     onDisconnect(userRef).update({
