@@ -2489,10 +2489,20 @@ function App() {
 
   const pushHistoryState = useCallback((pageId?: string | null) => {
     console.log('📝 [SYNC] pushHistoryState called with pageId:', pageId);
+    
+    // **SAFETY NET: Auto-reset isRestoringRef se bloccato per più di 5 secondi**
     if (isRestoringRef.current) {
-      console.log('🚫 [SYNC] Skipping - isRestoringRef is true');
-      return;
+      if (!window.lastRestoreTime) window.lastRestoreTime = 0;
+      const timeSinceRestore = Date.now() - window.lastRestoreTime;
+      if (timeSinceRestore > 5000) {
+        console.warn('🔧 [SYNC] SAFETY RESET: isRestoringRef stuck, forcing reset');
+        isRestoringRef.current = false;
+      } else {
+        console.log('🚫 [SYNC] Skipping - isRestoringRef is true');
+        return;
+      }
     }
+    window.lastRestoreTime = Date.now();
     
     // 🚨 BLOCCO SYNC durante ricostruzione Firebase per prevenire loop
     if (isApplyingRemoteDataRef.current) {
@@ -2548,9 +2558,18 @@ function App() {
   }, [getCurrentPageId, persistDocument, scheduleCanvasFullSync, snapshotCanvasByPageId]);
 
   const pushRemoteHistoryState = useCallback((pageId: string) => {
+    // **SAFETY NET: Auto-reset isRestoringRef se bloccato per più di 5 secondi**
     if (isRestoringRef.current) {
-      return;
+      if (!window.lastRestoreTime) window.lastRestoreTime = 0;
+      const timeSinceRestore = Date.now() - window.lastRestoreTime;
+      if (timeSinceRestore > 5000) {
+        console.warn('🔧 [SYNC] SAFETY RESET: isRestoringRef stuck in pushRemote, forcing reset');
+        isRestoringRef.current = false;
+      } else {
+        return;
+      }
     }
+    window.lastRestoreTime = Date.now();
     const snapshot = snapshotCanvasByPageId(pageId);
     if (!snapshot) {
       return;
