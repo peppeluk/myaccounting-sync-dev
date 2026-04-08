@@ -277,24 +277,29 @@ export const useCanvasSyncFirebase = (
         }
       });
 
-      console.log('[Firebase] 🕐 Most recent state available');
+      console.log('[Firebase] Most recent state available');
 
       // Applica lo stato più recente se non è del client corrente
       if (mostRecentState && mostRecentState.clientId !== clientIdRef.current) {
-        // 🚨 PREVENI RICOSTRUZIONI DUPLICATE - controlla se abbiamo già processato questo stato
-        const stateKey = `${mostRecentState.clientId}-${mostRecentState.state?.timestamp || 'no-timestamp'}-${mostRecentState.state?.objects?.length || 0}`;
-        console.log('[Firebase] 🔍 Generated state key:', stateKey);
-        console.log('[Firebase] 🔍 Last processed state:', lastProcessedStateRef.current);
-        
-        if (lastProcessedStateRef.current === stateKey) {
-          console.log('[Firebase] ⏭️ Skipping duplicate state:', stateKey);
+        // Controlla se stiamo già processando o se è passato troppo poco tempo dall'ultimo sync
+        const now = Date.now();
+        if (now - lastReconstructTimeRef.current < 500) {
+          console.log('[Firebase] Throttling sync - too soon since last reconstruction');
           return;
         }
         
-        console.log('[Firebase] 🎯 Applying most recent remote state from:', mostRecentState.clientId);
-        console.log('[Firebase] 📥 RAW canvas snapshot received:', mostRecentState);
-        console.log('[Firebase] 🔍 Canvas ref available:', !!canvasRef.current);
-        console.log('[Firebase] 🔍 Client ID check:', mostRecentState.clientId, 'vs', clientIdRef.current);
+        // PREVENI RICOSTRUZIONI DUPLICATE - controlla se abbiamo già processato questo stato
+        const stateKey = `${mostRecentState.clientId}-${mostRecentState.state?.timestamp || 'no-timestamp'}-${mostRecentState.state?.objects?.length || 0}`;
+        console.log('[Firebase] Generated state key:', stateKey);
+        console.log('[Firebase] Last processed state:', lastProcessedStateRef.current);
+        
+        if (lastProcessedStateRef.current === stateKey) {
+          console.log('[Firebase] Skipping duplicate state:', stateKey);
+          return;
+        }
+        
+        // Aggiorna timestamp dell'ultima ricostruzione
+        lastReconstructTimeRef.current = now;
         console.log('[Firebase] 🔍 State data:', !!mostRecentState.state);
         console.log('[Firebase] 🔍 State objects:', mostRecentState.state?.objects?.length);
         console.log('[Firebase] 🔍 Fabric available:', !!fabric);
