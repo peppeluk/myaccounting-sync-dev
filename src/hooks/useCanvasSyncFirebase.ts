@@ -525,15 +525,17 @@ export const useCanvasSyncFirebase = (
 
   // Salva stato canvas
   const saveCanvasState = useCallback(() => {
-    console.log('[Firebase] 💾 saveCanvasState called');
+    console.log('[Firebase] 💾 saveCanvasState called on client:', clientIdRef.current);
     console.log('[Firebase] 🔍 Canvas ref:', !!canvasRef.current);
     console.log('[Firebase] 🔍 Database:', !!database);
     console.log('[Firebase] 🔍 Current room:', !!currentRoomRef.current);
     console.log('[Firebase] 🔍 isApplyingRemoteDataRef:', isApplyingRemoteDataRef.current);
+    console.log('[Firebase] 🔍 Canvas objects count:', canvasRef.current?.getObjects()?.length || 0);
     
     // ** CONTROLLO DI SICUREZZA - resetta flag se bloccato per più di 5 secondi
     if (isApplyingRemoteDataRef.current) {
       const timeSinceLastRemoteApply = Date.now() - (lastRemoteApplyTimeRef.current || 0);
+      console.log('[Firebase] ⏱️ Time since last remote apply:', timeSinceLastRemoteApply, 'ms');
       if (timeSinceLastRemoteApply > 5000) {
         console.warn('[Firebase] ⚠️ saveCanvasState: isApplyingRemoteDataRef stuck for', timeSinceLastRemoteApply, 'ms - forcing reset');
         isApplyingRemoteDataRef.current = false;
@@ -545,6 +547,9 @@ export const useCanvasSyncFirebase = (
     
     if (!canvasRef.current || !database || !currentRoomRef.current) {
       console.log('[Firebase] ❌ saveCanvasState blocked - missing requirements');
+      console.log('   - canvasRef.current:', !!canvasRef.current);
+      console.log('   - database:', !!database);
+      console.log('   - currentRoomRef.current:', !!currentRoomRef.current);
       return;
     }
 
@@ -552,14 +557,18 @@ export const useCanvasSyncFirebase = (
       const canvasState = canvasRef.current.toJSON();
       const stateRef = ref(database, `rooms/${currentRoomRef.current}/canvasStates/${clientIdRef.current}`);
       
+      console.log('[Firebase] 📤 About to save state for client:', clientIdRef.current);
+      console.log('[Firebase] 📤 Firebase path:', `rooms/${currentRoomRef.current}/canvasStates/${clientIdRef.current}`);
+      console.log('[Firebase] 📤 Canvas objects being saved:', canvasState.objects?.length || 0);
+      
       set(stateRef, {
         state: canvasState,
         timestamp: Date.now()
       });
 
-      console.log('[Firebase] ✅ Canvas state saved for client:', clientIdRef.current);
+      console.log('[Firebase] ✅ Canvas state saved successfully for client:', clientIdRef.current);
     } catch (error) {
-      console.error('[Firebase] Error saving canvas state:', error);
+      console.error('[Firebase] ❌ Error saving canvas state:', error);
     }
   }, []);
 
