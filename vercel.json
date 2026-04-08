@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
+  "buildCommand": "vite build --mode production",
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "rewrites": [
