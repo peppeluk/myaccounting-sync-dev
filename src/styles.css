@@ -1860,10 +1860,12 @@ button:disabled {
 
 .mobile-menu {
   display: none;
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 400px;
   background: #ffffff;
   border: 1px solid #d5dce7;
   border-radius: 8px;
@@ -1871,16 +1873,15 @@ button:disabled {
   z-index: 9999;
   max-height: 400px;
   overflow-y: auto;
-  transform: translateY(100%);
-  transition: transform 0.3s ease-in-out;
   opacity: 0;
   pointer-events: none;
+  transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
 }
 
 .mobile-menu.open {
-  transform: translateY(0);
   opacity: 1;
   pointer-events: auto;
+  transform: translateX(-50%);
 }
 
 .mobile-menu-row {

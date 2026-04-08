@@ -6647,144 +6647,6 @@ function App() {
           currentClientId={syncClientIdRef.current}
         />
 
-        {/* Mobile Menu Content - mostra tutti i pulsanti nascosti su schermi piccoli */}
-        <div className={`mobile-menu ${isMobileMenuOpen ? 'open' : ''}`} onClick={(e) => e.stopPropagation()}>
-          <div className="mobile-menu-row">
-            {/* Strumenti di disegno */}
-            <button
-              className={`icon-button ${tool === "pen" ? "active" : ""}`}
-              onClick={handlePenClick}
-              title="Penna"
-              aria-label="Penna"
-              type="button"
-            >
-              <i className="fa-solid fa-pen" />
-              <span>Penna</span>
-            </button>
-            <button
-              className={`icon-button ${tool === "eraser" ? "active" : ""}`}
-              onClick={() => setTool("eraser")}
-              title="Gomma"
-              aria-label="Gomma"
-              type="button"
-            >
-              <i className="fa-solid fa-eraser" />
-              <span>Gomma</span>
-            </button>
-            <button
-              className={`icon-button ${tool === "line" ? "active" : ""}`}
-              onClick={() => setTool("line")}
-              title="Linea"
-              aria-label="Linea"
-              type="button"
-            >
-              <i className="fa-solid fa-minus" />
-              <span>Linea</span>
-            </button>
-            <button
-              className={`icon-button ${tool === "pan" ? "active" : ""}`}
-              onClick={() => setTool("pan")}
-              title="Mano (scorri)"
-              aria-label="Mano (scorri)"
-              type="button"
-            >
-              <i className="fa-solid fa-hand" />
-              <span>Mano</span>
-            </button>
-            <button
-              className={`icon-button ${isSelectionMode ? "active" : ""}`}
-              onClick={() => {
-                const newSelectionMode = !isSelectionMode;
-                setIsSelectionMode(newSelectionMode);
-                if (newSelectionMode) {
-                  setTool("pan");
-                }
-              }}
-              title="Selezione"
-              aria-label="Selezione"
-              type="button"
-            >
-              <i className="fa-solid fa-arrow-pointer" />
-              <span>Selezione</span>
-            </button>
-          </div>
-          <div className="mobile-menu-row">
-            {/* Strumenti di sfondo e pagina */}
-            <button
-              className={backgroundMode === "grid" ? "icon-button active background-grid-button" : "icon-button background-grid-button"}
-              title="Sfondo a quadretti"
-              aria-label="Sfondo a quadretti"
-              type="button"
-              onClick={() => setBackgroundMode((value) => (value === "grid" ? "plain" : "grid"))}
-            >
-              <span className="grid-icon" aria-hidden="true" />
-              <span>Sfondo</span>
-            </button>
-            <button
-              className="icon-button"
-              title="Nuova pagina"
-              aria-label="Nuova pagina"
-              type="button"
-              onClick={() => void addPage()}
-            >
-              <i className="fa-solid fa-square-plus" />
-              <span>Nuova pagina</span>
-            </button>
-            <button
-              className="icon-button"
-              title="Nuovo documento"
-              aria-label="Nuovo documento"
-              type="button"
-              onClick={() => void createNewDocument()}
-            >
-              <i className="fa-solid fa-file" />
-              <span>Nuovo doc</span>
-            </button>
-          </div>
-          <div className="mobile-menu-row">
-            {/* Pannelli e utility */}
-            <button
-              className={isJournalOpen ? "icon-button active" : "icon-button"}
-              title="Prima Nota"
-              aria-label="Prima Nota"
-              type="button"
-              onClick={toggleJournalPanel}
-            >
-              <i className="fa-solid fa-book-open" />
-              <span>Prima Nota</span>
-            </button>
-            <button
-              className={isArchiveOpen ? "icon-button active" : "icon-button"}
-              title="Archivio"
-              aria-label="Archivio"
-              type="button"
-              onClick={() => setIsArchiveOpen((value) => !value)}
-            >
-              <i className="fa-solid fa-box-archive" />
-              <span>Archivio</span>
-            </button>
-            <button
-              className="icon-button"
-              title="Calcolatrice"
-              aria-label="Calcolatrice"
-              type="button"
-              onClick={toggleCalculatorPanel}
-            >
-              <i className="fa-solid fa-calculator" />
-              <span>Calcolatrice</span>
-            </button>
-            <button
-              className={`icon-button ${!disableSystemKeyboard ? "active" : ""}`}
-              title={disableSystemKeyboard ? "Tastiera di sistema disabilitata" : "Tastiera di sistema abilitata"}
-              aria-label={disableSystemKeyboard ? "Abilita tastiera di sistema" : "Disabilita tastiera di sistema"}
-              type="button"
-              onClick={() => setDisableSystemKeyboard(!disableSystemKeyboard)}
-            >
-              <i className={`fa-solid fa-keyboard`} style={{ color: disableSystemKeyboard ? '#dc2626' : undefined }} />
-              <span>Tastiera</span>
-            </button>
-          </div>
-        </div>
         {/* Math Recognition button - DISABLED */}
         {/* <button
           className={`icon-button ${useMathRec ? 'active' : ''}`}
@@ -6800,6 +6662,145 @@ function App() {
           </span>
         </button> */}
       </section>
+
+      {/* Mobile Menu Content - posizionato rispetto alla pagina, non alla toolbar */}
+      <div className={`mobile-menu ${isMobileMenuOpen ? 'open' : ''}`} onClick={(e) => e.stopPropagation()}>
+        <div className="mobile-menu-row">
+          {/* Strumenti di disegno */}
+          <button
+            className={`icon-button ${tool === "pen" ? "active" : ""}`}
+            onClick={handlePenClick}
+            title="Penna"
+            aria-label="Penna"
+            type="button"
+          >
+            <i className="fa-solid fa-pen" />
+            <span>Penna</span>
+          </button>
+          <button
+            className={`icon-button ${tool === "eraser" ? "active" : ""}`}
+            onClick={() => setTool("eraser")}
+            title="Gomma"
+            aria-label="Gomma"
+            type="button"
+          >
+            <i className="fa-solid fa-eraser" />
+            <span>Gomma</span>
+          </button>
+          <button
+            className={`icon-button ${tool === "line" ? "active" : ""}`}
+            onClick={() => setTool("line")}
+            title="Linea"
+            aria-label="Linea"
+            type="button"
+          >
+            <i className="fa-solid fa-minus" />
+            <span>Linea</span>
+          </button>
+          <button
+            className={`icon-button ${tool === "pan" ? "active" : ""}`}
+            onClick={() => setTool("pan")}
+            title="Mano (scorri)"
+            aria-label="Mano (scorri)"
+            type="button"
+          >
+            <i className="fa-solid fa-hand" />
+            <span>Mano</span>
+          </button>
+          <button
+            className={`icon-button ${isSelectionMode ? "active" : ""}`}
+            onClick={() => {
+              const newSelectionMode = !isSelectionMode;
+              setIsSelectionMode(newSelectionMode);
+              if (newSelectionMode) {
+                setTool("pan");
+              }
+            }}
+            title="Selezione"
+            aria-label="Selezione"
+            type="button"
+          >
+            <i className="fa-solid fa-arrow-pointer" />
+            <span>Selezione</span>
+          </button>
+        </div>
+        <div className="mobile-menu-row">
+          {/* Strumenti di sfondo e pagina */}
+          <button
+            className={backgroundMode === "grid" ? "icon-button active background-grid-button" : "icon-button background-grid-button"}
+            title="Sfondo a quadretti"
+            aria-label="Sfondo a quadretti"
+            type="button"
+            onClick={() => setBackgroundMode((value) => (value === "grid" ? "plain" : "grid"))}
+          >
+            <span className="grid-icon" aria-hidden="true" />
+            <span>Sfondo</span>
+          </button>
+          <button
+            className="icon-button"
+            title="Nuova pagina"
+            aria-label="Nuova pagina"
+            type="button"
+            onClick={() => void addPage()}
+          >
+            <i className="fa-solid fa-square-plus" />
+            <span>Nuova pagina</span>
+          </button>
+          <button
+            className="icon-button"
+            title="Nuovo documento"
+            aria-label="Nuovo documento"
+            type="button"
+            onClick={() => void createNewDocument()}
+          >
+            <i className="fa-solid fa-file" />
+            <span>Nuovo doc</span>
+          </button>
+        </div>
+        <div className="mobile-menu-row">
+          {/* Pannelli e utility */}
+          <button
+            className={isJournalOpen ? "icon-button active" : "icon-button"}
+            title="Prima Nota"
+            aria-label="Prima Nota"
+            type="button"
+            onClick={toggleJournalPanel}
+          >
+            <i className="fa-solid fa-book-open" />
+            <span>Prima Nota</span>
+          </button>
+          <button
+            className={isArchiveOpen ? "icon-button active" : "icon-button"}
+            title="Archivio"
+            aria-label="Archivio"
+            type="button"
+            onClick={() => setIsArchiveOpen((value) => !value)}
+          >
+            <i className="fa-solid fa-box-archive" />
+            <span>Archivio</span>
+          </button>
+          <button
+            className="icon-button"
+            title="Calcolatrice"
+            aria-label="Calcolatrice"
+            type="button"
+            onClick={toggleCalculatorPanel}
+          >
+            <i className="fa-solid fa-calculator" />
+            <span>Calcolatrice</span>
+          </button>
+          <button
+            className={`icon-button ${!disableSystemKeyboard ? "active" : ""}`}
+            title={disableSystemKeyboard ? "Tastiera di sistema disabilitata" : "Tastiera di sistema abilitata"}
+            aria-label={disableSystemKeyboard ? "Abilita tastiera di sistema" : "Disabilita tastiera di sistema"}
+            type="button"
+            onClick={() => setDisableSystemKeyboard(!disableSystemKeyboard)}
+          >
+            <i className={`fa-solid fa-keyboard`} style={{ color: disableSystemKeyboard ? '#dc2626' : undefined }} />
+            <span>Tastiera</span>
+          </button>
+        </div>
+      </div>
 
       <JournalPanel
         isOpen={isJournalOpen}
