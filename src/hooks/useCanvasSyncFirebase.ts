@@ -563,7 +563,10 @@ export const useCanvasSyncFirebase = (
     sendJournalAction: (action: any) => {},
     sendJournalState: (state: any) => {},
     sendBoardState: (state: any) => {},
-    sendCanvasFullState: (state: any) => {},
+    sendCanvasFullState: () => {
+      console.log('[Firebase] sendCanvasFullState called');
+      saveCanvasState();
+    },
     disconnectUser: (clientId: string) => {},
     disconnectAllOtherUsers: () => {},
     // Ref per compatibilità
