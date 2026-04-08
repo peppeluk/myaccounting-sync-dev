@@ -6619,7 +6619,11 @@ function App() {
         {/* Menu Mobile Button */}
         <button
           className="mobile-menu-toggle"
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          onClick={() => {
+            console.log('Mobile menu clicked - isMobileMenuOpen:', isMobileMenuOpen);
+            setIsMobileMenuOpen(!isMobileMenuOpen);
+            console.log('Mobile menu new state:', !isMobileMenuOpen);
+          }}
           aria-label="Menu"
           type="button"
         >
