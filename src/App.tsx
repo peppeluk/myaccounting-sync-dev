@@ -6619,7 +6619,10 @@ function App() {
         {/* Menu Mobile Button */}
         <button
           className="mobile-menu-toggle"
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          onClick={() => {
+            console.log('Mobile menu toggle clicked - current state:', isMobileMenuOpen);
+            setIsMobileMenuOpen(!isMobileMenuOpen);
+          }}
           aria-label="Menu"
           type="button"
         >
@@ -6645,6 +6648,10 @@ function App() {
 
         {/* Mobile Menu Content - mostra tutti i pulsanti nascosti su schermi piccoli */}
         <div className={`mobile-menu ${isMobileMenuOpen ? 'open' : ''}`} onClick={(e) => e.stopPropagation()}>
+          {/* Debug message */}
+          <div style={{padding: "8px", background: "#f0f0f0", fontSize: "12px", textAlign: "center", borderBottom: "1px solid #ddd"}}>
+            MENU MOBILE - isMobileMenuOpen: {isMobileMenuOpen.toString()}
+          </div>
           <div className="mobile-menu-row">
             {/* Strumenti di disegno */}
             <button
