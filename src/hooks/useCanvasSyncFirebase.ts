@@ -104,6 +104,7 @@ export const useCanvasSyncFirebase = (
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isJoiningRef = useRef<boolean>(false);
   const isReconstructingRef = useRef<boolean>(false);
+  const isProcessingRef = useRef<boolean>(false); // 🚨 Blocca esecuzioni multiple
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastReconstructTimeRef = useRef<number>(0);
   const lastProcessedStateRef = useRef<any>(null); // 🚨 Track last processed state
@@ -281,12 +282,23 @@ export const useCanvasSyncFirebase = (
 
       // Applica lo stato più recente se non è del client corrente
       if (mostRecentState && mostRecentState.clientId !== clientIdRef.current) {
+        // 🚨 BLOCCO IMMEDIATO - previene esecuzioni multiple
+        if (isProcessingRef.current) {
+          console.log('[Firebase] ⏸️ Already processing - skipping');
+          return;
+        }
+        
         // Controlla se stiamo già processando o se è passato troppo poco tempo dall'ultimo sync
         const now = Date.now();
         if (now - lastReconstructTimeRef.current < 500) {
           console.log('[Firebase] Throttling sync - too soon since last reconstruction');
+          isProcessingRef.current = false; // 🚨 RESET FLAG
           return;
         }
+        
+        // 🚨 IMPOSTA FLAG PROCESSING IMMEDIATAMENTE
+        isProcessingRef.current = true;
+        console.log('[Firebase] 🔒 Processing flag set');
         
         // PREVENI RICOSTRUZIONI DUPLICATE - controlla se abbiamo già processato questo stato
         const stateKey = `${mostRecentState.clientId}-${mostRecentState.state?.timestamp || 'no-timestamp'}-${mostRecentState.state?.objects?.length || 0}`;
@@ -295,6 +307,7 @@ export const useCanvasSyncFirebase = (
         
         if (lastProcessedStateRef.current === stateKey) {
           console.log('[Firebase] Skipping duplicate state:', stateKey);
+          isProcessingRef.current = false; // 🚨 RESET FLAG
           return;
         }
         
