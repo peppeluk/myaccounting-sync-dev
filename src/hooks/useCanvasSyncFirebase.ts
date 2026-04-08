@@ -106,6 +106,7 @@ export const useCanvasSyncFirebase = (
   const isReconstructingRef = useRef<boolean>(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastReconstructTimeRef = useRef<number>(0);
+  const lastProcessedStateRef = useRef<any>(null); // 🚨 Track last processed state
   
   // 🚨 LISTENER MANAGEMENT
   const unsubUsersRef = useRef<(() => void) | null>(null);
@@ -280,6 +281,13 @@ export const useCanvasSyncFirebase = (
 
       // Applica lo stato più recente se non è del client corrente
       if (mostRecentState && mostRecentState.clientId !== clientIdRef.current) {
+        // 🚨 PREVENI RICOSTRUZIONI DUPLICATE - controlla se abbiamo già processato questo stato
+        const stateKey = `${mostRecentState.clientId}-${mostRecentState.timestamp}-${mostRecentState.state?.objects?.length || 0}`;
+        if (lastProcessedStateRef.current === stateKey) {
+          console.log('[Firebase] ⏭️ Skipping duplicate state:', stateKey);
+          return;
+        }
+        
         console.log('[Firebase] 🎯 Applying most recent remote state from:', mostRecentState.clientId);
         console.log('[Firebase] 📥 RAW canvas snapshot received:', mostRecentState);
         console.log('[Firebase] 🔍 Canvas ref available:', !!canvasRef.current);
@@ -287,6 +295,7 @@ export const useCanvasSyncFirebase = (
         console.log('[Firebase] 🔍 State data:', !!mostRecentState.state);
         console.log('[Firebase] 🔍 State objects:', mostRecentState.state?.objects?.length);
         console.log('[Firebase] 🔍 Fabric available:', !!fabric);
+        console.log('[Firebase] 🔍 State key:', stateKey);
         
         // 🚨 CONTROLLO COMPLETO - previene ricostruzioni non necessarie
         if (!canvasRef.current || !mostRecentState.state || !fabric) {
@@ -396,7 +405,13 @@ export const useCanvasSyncFirebase = (
                   setTimeout(() => {
                     isApplyingRemoteDataRef.current = false;
                     console.log('[Firebase] ✅ Applied', mostRecentState.state.objects.length, 'objects from snapshot, events restored');
-                  }, 1000);
+                    console.log('[Firebase] 🔓 isApplyingRemoteDataRef reset to false - can save local changes now');
+                    
+                    // 🚨 AGGIORNA last processed state per prevenire duplicati
+                    const stateKey = `${mostRecentState.clientId}-${mostRecentState.timestamp}-${mostRecentState.state?.objects?.length || 0}`;
+                    lastProcessedStateRef.current = stateKey;
+                    console.log('[Firebase] 📝 Updated lastProcessedStateRef:', stateKey);
+                  }, 200); // Ridotto da 1000ms a 200ms
                   
                 }).catch((error) => {
                   console.error('[Firebase] 💥 Error during reconstruction:', error);
@@ -487,7 +502,14 @@ export const useCanvasSyncFirebase = (
 
   // Salva stato canvas
   const saveCanvasState = useCallback(() => {
+    console.log('[Firebase] 💾 saveCanvasState called');
+    console.log('[Firebase] 🔍 Canvas ref:', !!canvasRef.current);
+    console.log('[Firebase] 🔍 Database:', !!database);
+    console.log('[Firebase] 🔍 Current room:', !!currentRoomRef.current);
+    console.log('[Firebase] 🔍 isApplyingRemoteDataRef:', isApplyingRemoteDataRef.current);
+    
     if (!canvasRef.current || !database || !currentRoomRef.current || isApplyingRemoteDataRef.current) {
+      console.log('[Firebase] ❌ saveCanvasState blocked - missing requirements or applying remote data');
       return;
     }
 
@@ -500,7 +522,7 @@ export const useCanvasSyncFirebase = (
         timestamp: Date.now()
       });
 
-      console.log('[Firebase] 💾 Canvas state saved');
+      console.log('[Firebase] ✅ Canvas state saved for client:', clientIdRef.current);
     } catch (error) {
       console.error('[Firebase] Error saving canvas state:', error);
     }
