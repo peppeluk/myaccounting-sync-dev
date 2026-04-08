@@ -143,6 +143,7 @@ export const useCanvasSyncFirebase = (
   const isApplyingRemoteDataRef = useRef<boolean>(false);
   const lastRemoteApplyTimeRef = useRef<number>(0); // ** Traccia ultimo apply remoto
   const currentRoomRef = useRef<string | null>(null);
+  const globalStateKeyRef = useRef<string>(''); // ** BLOCCO GLOBALE per prevenire applicazioni simultanee
   const listenersRef = useRef<any[]>([]);
 
   // Pulisci listeners quando cambia stanza
@@ -338,6 +339,19 @@ export const useCanvasSyncFirebase = (
           isProcessingRef.current = false;
           return;
         }
+
+        // 🚨 BLOCCO GLOBALE: Previene applicazioni simultanee dello stesso stato
+        const currentStateKey = `${mostRecentState.clientId}-${mostRecentState.state?.timestamp || 0}-${mostRecentState.state?.objects?.length || 0}`;
+        if (globalStateKeyRef.current === currentStateKey) {
+          console.log('[Firebase] 🚫 GLOBAL BLOCK: Same state already being applied elsewhere - SKIPPING');
+          console.log('[Firebase] 🚫 State key:', currentStateKey);
+          isProcessingRef.current = false;
+          return;
+        }
+        
+        // Imposta il blocco globale
+        globalStateKeyRef.current = currentStateKey;
+        console.log('[Firebase] 🔒 GLOBAL BLOCK SET for state:', currentStateKey);
         
         // 🚨 CONDIZIONI STRETTE - solo se tutte soddisfatte
         if (mostRecentState.clientId !== clientIdRef.current && canvasRef.current && mostRecentState.state && mostRecentState.state.objects && Array.isArray(mostRecentState.state.objects)) {
@@ -429,18 +443,6 @@ export const useCanvasSyncFirebase = (
                   
                   // Resetta flag dopo un ritardo per dare tempo agli eventi di stabilizzarsi
                   setTimeout(() => {
-                    isApplyingRemoteDataRef.current = false;
-                    console.log('[Firebase] ✅ Applied', mostRecentState.state.objects.length, 'objects from snapshot, events restored');
-                    console.log('[Firebase] 🔓 isApplyingRemoteDataRef reset to false - can save local changes now');
-                    
-                    // 🚨 AGGIORNA last processed state per prevenire duplicati
-                    const stateKey = `${mostRecentState.clientId}-${mostRecentState.state?.timestamp || 'no-timestamp'}-${mostRecentState.state?.objects?.length || 0}`;
-                    lastProcessedStateRef.current = stateKey;
-                    console.log('[Firebase] 📝 Updated lastProcessedStateRef:', stateKey);
-                  }, 200); // Ridotto da 1000ms a 200ms
-                  
-                }).catch((error) => {
-                  console.error('[Firebase] 💥 Error during reconstruction:', error);
                   // Ripristina eventi anche in caso di errore
                   canvasRef.current.__eventListeners = originalEvents;
                   isApplyingRemoteDataRef.current = false;
