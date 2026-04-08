@@ -257,9 +257,28 @@ export const useCanvasSyncFirebase = (
     console.log('🔧🔧🔧 CREATING CANVAS STATE LISTENER... 🔧🔧🔧');
     
     unsubCanvasStatesRef.current = onValue(canvasStatesRef, (snapshot) => {
-      console.log('🚨🚨🚨 CANVAS STATES LISTENER TRIGGERED! 🚨🚨🚨');
+      console.log('Firebase Listener Triggered');
       const allStates = snapshot.val();
       if (!allStates) return;
+      
+      // **BLOCCO FIREBASE ASSOLUTO** - previene loop infiniti di Firebase
+      const firebaseKey = JSON.stringify(allStates) + '-' + Date.now();
+      if (globalStateKeyRef.current && globalStateKeyRef.current.split('-')[0] === JSON.stringify(allStates)) {
+        console.log('[Firebase] **FIREBASE BLOCK: Same data from Firebase - IGNORING');
+        return;
+      }
+      
+      // **BLOCCO FREQUENZA** - max 1 chiamata ogni 2 secondi
+      const now = Date.now();
+      if (now - lastReconstructTimeRef.current < 2000) {
+        console.log('[Firebase] **FREQUENCY BLOCK: Too many Firebase calls - IGNORING');
+        return;
+      }
+      lastReconstructTimeRef.current = now;
+      
+      // Imposta blocco Firebase
+      globalStateKeyRef.current = firebaseKey;
+      console.log('[Firebase] **FIREBASE BLOCK SET for new data');
       
       // 🚨 BLOCCO GLOBALE IMMEDIATO - previene esecuzioni multiple dello stesso snapshot
       const snapshotKey = JSON.stringify(allStates);
@@ -466,23 +485,11 @@ export const useCanvasSyncFirebase = (
                   canvasRef.current.renderAll();
                   console.log('[Firebase] ✅ renderAll() completed');
                   
-                  // Resetta flag dopo un ritardo per dare tempo agli eventi di stabilizzarsi
-                  setTimeout(() => {
-                    // Ripristina eventi anche in caso di errore
-                    canvasRef.current.__eventListeners = originalEvents;
-                    isApplyingRemoteDataRef.current = false;
-                    
-                    // 🚨 AGGIORNA last processed state per prevenire duplicati
-                    lastProcessedStateRef.current = stateKey;
-                    
-                    // 🚨 RESET BLOCCO GLOBALE - permette nuovi stati
-                    globalStateKeyRef.current = '';
-                    console.log('[Firebase] 🔓 GLOBAL BLOCK RESET - new states can be applied');
-                    
-                    // 🚨 RESET BLOCCO HASH - permette nuovi stati
-                    globalProcessingHashRef.current = '';
-                    console.log('[Firebase] 🔓 HASH BLOCK RESET - new states can be applied');
-                  }, 200);
+                  // Reset completo di tutti i blocchi per permettere nuove chiamate
+                  globalStateKeyRef.current = '';
+                  globalProcessingHashRef.current = '';
+                  isProcessingRef.current = false;
+                  console.log('[Firebase] **ALL BLOCKS RESET - Firebase calls allowed again');
                 });
                 
               } catch (error) {
