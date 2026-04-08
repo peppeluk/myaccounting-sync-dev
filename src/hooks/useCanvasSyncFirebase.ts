@@ -282,7 +282,7 @@ export const useCanvasSyncFirebase = (
       // Applica lo stato più recente se non è del client corrente
       if (mostRecentState && mostRecentState.clientId !== clientIdRef.current) {
         // 🚨 PREVENI RICOSTRUZIONI DUPLICATE - controlla se abbiamo già processato questo stato
-        const stateKey = `${mostRecentState.clientId}-${mostRecentState.timestamp || 'no-timestamp'}-${mostRecentState.state?.objects?.length || 0}`;
+        const stateKey = `${mostRecentState.clientId}-${mostRecentState.state?.timestamp || 'no-timestamp'}-${mostRecentState.state?.objects?.length || 0}`;
         console.log('[Firebase] 🔍 Generated state key:', stateKey);
         console.log('[Firebase] 🔍 Last processed state:', lastProcessedStateRef.current);
         
@@ -411,7 +411,7 @@ export const useCanvasSyncFirebase = (
                     console.log('[Firebase] 🔓 isApplyingRemoteDataRef reset to false - can save local changes now');
                     
                     // 🚨 AGGIORNA last processed state per prevenire duplicati
-                    const stateKey = `${mostRecentState.clientId}-${mostRecentState.timestamp || 'no-timestamp'}-${mostRecentState.state?.objects?.length || 0}`;
+                    const stateKey = `${mostRecentState.clientId}-${mostRecentState.state?.timestamp || 'no-timestamp'}-${mostRecentState.state?.objects?.length || 0}`;
                     lastProcessedStateRef.current = stateKey;
                     console.log('[Firebase] 📝 Updated lastProcessedStateRef:', stateKey);
                   }, 200); // Ridotto da 1000ms a 200ms
